@@ -27,7 +27,7 @@ def _license(value: str | None) -> str:
 
 class WikimediaProvider(BaseImageProvider):
     async def search(
-        self, query: str, per_page: int, orientation: str | None
+        self, query: str, per_page: int, orientation: str | None, image_type: str | None = None
     ) -> list[ImageCandidate]:
         params = {
             "action": "query",
@@ -39,7 +39,7 @@ class WikimediaProvider(BaseImageProvider):
             "prop": "imageinfo|info",
             "inprop": "url",
             "iiprop": "url|size|mime|extmetadata",
-            "iiurlwidth": 1800,
+            "iiurlwidth": 1024,
             "origin": "*",
         }
         async with httpx.AsyncClient(timeout=25) as client:
@@ -78,7 +78,7 @@ class WikimediaProvider(BaseImageProvider):
                     license_url=(meta.get("LicenseUrl") or {}).get("value"),
                     width=info.get("thumbwidth") or info.get("width"),
                     height=info.get("thumbheight") or info.get("height"),
-                    tags=[query, title, description or ""],
+                    tags=[title, description or ""],
                 )
             )
         return out

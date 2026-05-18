@@ -7,6 +7,12 @@ from app.schemas import ImageResearchRequest, SearchPlan
 
 VALID_ORIENTATIONS = {"any", "landscape", "portrait", "square"}
 VALID_TYPES = {"photo", "illustration", "icon", "diagram", "any"}
+TYPE_ALIASES = {"graph": "diagram", "chart": "diagram", "schema": "diagram"}
+
+
+def canonical_image_type(value: str | None) -> str:
+    clean = (value or "any").strip().lower()
+    return TYPE_ALIASES.get(clean, clean if clean in VALID_TYPES else "any")
 
 
 class SearchPlanner:
@@ -33,6 +39,7 @@ class SearchPlanner:
             "user_prompt": request.prompt,
             "style": request.style,
             "preferred_orientation": request.preferred_orientation,
+            "requested_image_type": request.image_type,
         }
         response = await client.chat.completions.create(
             model=self.model,
@@ -53,6 +60,12 @@ class SearchPlanner:
                         "should include likely false positives such as replicas, reenactments, "
                         "memorials, fictional depictions, or modern staged results when those would "
                         "not satisfy the user's requested intent."
+                        " If the prompt names a country, person, event, song, team, place, or era, "
+                        "include factual aliases, official names, relevant years, and named entities "
+                        "that are likely to produce exact media. Do not invent years or names. "
+                        "If the prompt is not English, create English search queries while preserving "
+                        "original named entities. For education or biology structure requests, prefer "
+                        "diagram, anatomy, labeled illustration, cross section, and educational terms."
                     ),
                 },
                 {"role": "user", "content": json.dumps(prompt)},
@@ -64,8 +77,7 @@ class SearchPlanner:
         plan = SearchPlan(**data)
         if plan.preferred_orientation not in VALID_ORIENTATIONS:
             plan.preferred_orientation = request.preferred_orientation
-        if plan.image_type not in VALID_TYPES:
-            plan.image_type = "any"
+        plan.image_type = canonical_image_type(plan.image_type)
         return plan
 
     def _normalize(self, data: dict[str, Any], request: ImageResearchRequest) -> dict[str, Any]:
@@ -89,7 +101,7 @@ class SearchPlanner:
             "preferred_orientation": text(
                 data.get("preferred_orientation"), request.preferred_orientation
             ),
-            "image_type": text(data.get("image_type"), "any"),
+            "image_type": canonical_image_type(text(data.get("image_type"), request.image_type or "any")),
         }
 
     def _fallback(self, request: ImageResearchRequest) -> SearchPlan:
@@ -108,5 +120,5 @@ class SearchPlanner:
             ],
             bad_terms=[],
             preferred_orientation=request.preferred_orientation,
-            image_type="any",
+            image_type=canonical_image_type(request.image_type),
         )

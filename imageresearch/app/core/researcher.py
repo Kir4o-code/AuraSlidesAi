@@ -1,13 +1,18 @@
 import asyncio
+from collections import Counter
+import logging
 import re
+import time
 import uuid
+
+import httpx
 
 from app.config import settings
 from app.core.clip_scorer import ClipScorer
-from app.core.downloader import download_image
+from app.core.downloader import DownloadError, download_image
 from app.core.license_checker import is_allowed_license, license_score
 from app.core.search_planner import SearchPlanner
-from app.core.storage import copy_best_image, ensure_output_dirs, save_metadata, slugify
+from app.core.storage import copy_ranked_image, ensure_output_dirs, save_metadata, slugify
 from app.providers.openverse import OpenverseProvider
 from app.providers.pexels import PexelsProvider
 from app.providers.pixabay import PixabayProvider
@@ -19,6 +24,9 @@ from app.schemas import (
     SearchPlan,
     SelectedImage,
 )
+
+
+logger = logging.getLogger("image_researcher")
 
 
 class ImageResearcher:
@@ -38,67 +46,87 @@ class ImageResearcher:
         warnings: list[str] = []
         search_plan: SearchPlan | None = None
         scored: list[ImageCandidate] = []
+        started = time.perf_counter()
 
         try:
+            logger.info(
+                "research.start id=%s prompt=%r image_type=%s requested=%s",
+                request_id,
+                request.prompt,
+                request.image_type,
+                request.max_candidates,
+            )
             search_plan, plan_warnings = await self.planner.create_plan(request)
             warnings.extend(plan_warnings)
-            candidates = await self._search(search_plan, request.max_candidates, warnings)
+            logger.info(
+                "research.plan id=%s main=%r type=%s alternatives=%s",
+                request_id,
+                search_plan.main_query,
+                search_plan.image_type,
+                len(search_plan.alternative_queries),
+            )
+            candidates = await self._search(search_plan, request, warnings)
+            raw_count = len(candidates)
             candidates = self._dedupe(candidates)
             candidates = [c for c in candidates if is_allowed_license(c.license_name)]
+            logger.info("research.candidates id=%s raw=%s licensed=%s", request_id, raw_count, len(candidates))
             if not candidates:
                 warnings.append("No candidates passed license filtering.")
                 return self._empty(search_plan, warnings)
 
             ranked = self._rank_before_download(candidates, request, search_plan)
-            downloaded = await self._download(ranked[: request.max_candidates], request_id, warnings)
+            download_limit = min(max(request.max_candidates * 3, 12), 32)
+            downloaded = await self._download(
+                ranked[:download_limit],
+                request_id,
+                warnings,
+                max(request.max_candidates * 2, request.max_candidates + 4),
+            )
+            logger.info("research.downloaded id=%s downloaded=%s limit=%s", request_id, len(downloaded), download_limit)
             if not downloaded:
                 warnings.append("No candidates could be downloaded and validated.")
                 return self._empty(search_plan, warnings)
 
-            clip_prompt = (
-                f"An image matching this request: {request.prompt}. "
-                f"Desired style: {request.style or 'any'}. "
-                "The image should clearly represent the user's intent and be visually useful."
-            )
+            clip_prompts = self._clip_prompts(request, search_plan)
             try:
-                scores = self.scorer.score_images(
+                scores = self.scorer.score_images_against_texts(
                     [c.local_temp_path or "" for c in downloaded],
-                    clip_prompt,
+                    clip_prompts,
                 )
             except Exception as exc:
                 warnings.append(f"CLIP scoring failed; used metadata ranking only: {exc}")
                 scores = [self._metadata_score(c, request, search_plan) for c in downloaded]
-            scored = self._score(downloaded, scores, request, search_plan)
-            best = max(scored, key=lambda c: c.final_score or 0)
-            best_path = copy_best_image(best.local_temp_path or "", request_id, prompt_slug)
-
-            selected = SelectedImage(
-                local_path=f"output/images/{prompt_slug}/{best_path.name}",
-                public_url=f"/images/{prompt_slug}/{best_path.name}",
-                source=best.source,
-                source_url=best.source_url,
-                image_url=best.image_url,
-                author=best.author,
-                license_name=best.license_name,
-                width=best.width,
-                height=best.height,
-                clip_score=best.clip_score,
-                final_score=best.final_score,
+            scored = sorted(
+                self._score(downloaded, scores, request, search_plan),
+                key=lambda c: c.final_score or 0,
+                reverse=True,
+            )
+            selected_images = self._select_images(scored, request_id, prompt_slug, request.max_candidates)
+            selected = selected_images[0] if selected_images else None
+            logger.info(
+                "research.done id=%s selected=%s scored=%s seconds=%.2f warnings=%s",
+                request_id,
+                len(selected_images),
+                len(scored),
+                time.perf_counter() - started,
+                len(warnings),
             )
             save_metadata(
                 request_id,
                 {
                     "original_request": request.model_dump(),
                     "search_plan": search_plan.model_dump(),
-                    "selected_image": selected.model_dump(),
+                    "selected_image": selected.model_dump() if selected else None,
+                    "selected_images": [image.model_dump() for image in selected_images],
                     "scored_candidates": [c.model_dump() for c in scored],
                     "warnings": warnings,
                 },
                 prompt_slug,
             )
             return ImageResearchResponse(
-                success=True,
+                success=bool(selected),
                 selected_image=selected,
+                selected_images=selected_images,
                 search_plan=search_plan,
                 candidate_count=len(scored),
                 warnings=warnings,
@@ -108,36 +136,174 @@ class ImageResearcher:
             return ImageResearchResponse(
                 success=False,
                 selected_image=None,
+                selected_images=[],
                 search_plan=search_plan,
                 candidate_count=len(scored),
                 warnings=warnings,
             )
 
     async def _search(
-        self, plan: SearchPlan, max_candidates: int, warnings: list[str]
+        self, plan: SearchPlan, request: ImageResearchRequest, warnings: list[str]
     ) -> list[ImageCandidate]:
-        queries = [plan.main_query, *plan.alternative_queries]
-        per_page = max(8, min(max_candidates * 3, 30))
-        tasks = []
+        queries = await self._expanded_queries(plan, request, warnings)
+        per_page = max(8, min(request.max_candidates * 4, 30))
+        task_specs = []
         for provider in self.providers:
             for query in queries:
-                tasks.append(provider.search(query, per_page, plan.preferred_orientation))
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+                if plan.image_type in {"diagram", "illustration", "icon"} and provider.__class__.__name__ == "PexelsProvider":
+                    continue
+                task_specs.append(
+                    (
+                        provider.__class__.__name__.replace("Provider", "").lower(),
+                        query,
+                        provider.search(query, per_page, plan.preferred_orientation, plan.image_type),
+                    )
+                )
+        results = await asyncio.gather(*(task for _, _, task in task_specs), return_exceptions=True)
         candidates: list[ImageCandidate] = []
-        for result in results:
+        errors: Counter[str] = Counter()
+        for (provider_name, _, _), result in zip(task_specs, results):
             if isinstance(result, Exception):
-                warnings.append(f"Provider search failed: {result}")
+                errors[f"{provider_name}: {str(result).splitlines()[0]}"] += 1
             else:
                 candidates.extend(result)
+        for error, count in errors.items():
+            warnings.append(f"Provider search failed {count} time(s): {error}")
+        logger.info(
+            "research.search queries=%s candidates=%s errors=%s",
+            len(queries),
+            len(candidates),
+            sum(errors.values()),
+        )
         return candidates
+
+    async def _expanded_queries(
+        self, plan: SearchPlan, request: ImageResearchRequest, warnings: list[str]
+    ) -> list[str]:
+        queries = [request.prompt]
+        type_queries: list[str] = []
+        if plan.image_type == "diagram":
+            type_queries.extend(
+                [
+                    f"{plan.main_query} diagram",
+                    f"{plan.main_query} labeled diagram",
+                    f"{plan.main_query} educational illustration",
+                    f"{plan.main_query} cross section",
+                ]
+            )
+        elif plan.image_type in {"illustration", "icon"}:
+            type_queries.extend([f"{plan.main_query} {plan.image_type}", f"{plan.main_query} vector"])
+        wiki_queries: list[str] = []
+        try:
+            params = {
+                "action": "opensearch",
+                "format": "json",
+                "search": plan.main_query,
+                "limit": 5,
+                "namespace": 0,
+                "origin": "*",
+            }
+            async with httpx.AsyncClient(timeout=12) as client:
+                resp = await client.get(
+                    "https://en.wikipedia.org/w/api.php",
+                    params=params,
+                    headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
+                )
+                resp.raise_for_status()
+                titles = resp.json()[1]
+            wiki_queries.extend(title for title in titles if isinstance(title, str))
+        except Exception as exc:
+            warnings.append(f"Wikipedia query expansion failed: {exc}")
+        queries.extend(await self._multilingual_wikipedia_queries(request.prompt, warnings))
+        queries.append(plan.main_query)
+        queries.extend(type_queries)
+        queries.extend(wiki_queries)
+        queries.extend(plan.alternative_queries)
+
+        seen: set[str] = set()
+        out: list[str] = []
+        for query in queries:
+            clean = " ".join(query.split())
+            key = clean.lower()
+            if clean and key not in seen:
+                seen.add(key)
+                out.append(clean)
+        return out[:8]
+
+    async def _multilingual_wikipedia_queries(self, prompt: str, warnings: list[str]) -> list[str]:
+        if prompt.isascii():
+            return []
+        stop_words = {
+            "\u0438",
+            "\u043d\u0430",
+            "\u0437\u0430",
+            "\u0441\u044a\u0441",
+            "\u0431\u0435\u0437",
+            "\u043a\u0430\u0442\u043e",
+            "\u043d\u0435\u0433\u043e",
+            "\u043d\u0435\u0433\u043e\u0432\u043e\u0442\u043e",
+            "\u043d\u0435\u0439\u043d\u043e\u0442\u043e",
+            "\u0431\u0438\u043e\u043b\u043e\u0433\u0438\u044f",
+            "\u0447\u043e\u0432\u0435\u0448\u043a\u043e\u0442\u043e",
+            "\u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e",
+        }
+        words = [
+            word
+            for word in re.findall(r"[^\W\d_]{3,}", prompt.lower(), flags=re.UNICODE)
+            if word not in stop_words
+        ]
+        searches = [prompt, *list(reversed(words[:5]))]
+        queries: list[str] = []
+        try:
+            async with httpx.AsyncClient(timeout=12) as client:
+                for search in searches:
+                    resp = await client.get(
+                        "https://bg.wikipedia.org/w/api.php",
+                        params={
+                            "action": "opensearch",
+                            "format": "json",
+                            "search": search,
+                            "limit": 3,
+                            "namespace": 0,
+                            "origin": "*",
+                        },
+                        headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
+                    )
+                    resp.raise_for_status()
+                    for title in resp.json()[1][:1]:
+                        if isinstance(title, str):
+                            queries.append(title)
+                            lang = await client.get(
+                                "https://bg.wikipedia.org/w/api.php",
+                                params={
+                                    "action": "query",
+                                    "format": "json",
+                                    "titles": title,
+                                    "prop": "langlinks",
+                                    "lllang": "en",
+                                    "origin": "*",
+                                },
+                                headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
+                            )
+                            lang.raise_for_status()
+                            pages = (lang.json().get("query") or {}).get("pages") or {}
+                            for page in pages.values():
+                                for link in page.get("langlinks") or []:
+                                    if link.get("lang") == "en" and link.get("*"):
+                                        queries.append(link["*"])
+        except Exception as exc:
+            warnings.append(f"Multilingual query expansion failed: {exc}")
+        return queries
 
     def _dedupe(self, candidates: list[ImageCandidate]) -> list[ImageCandidate]:
         seen: set[str] = set()
         out: list[ImageCandidate] = []
         for candidate in candidates:
-            if candidate.image_url in seen:
+            key = candidate.source_url or candidate.image_url
+            if candidate.image_url in seen or key in seen:
                 continue
             seen.add(candidate.image_url)
+            seen.add(key)
             out.append(candidate)
         return out
 
@@ -157,23 +323,51 @@ class ImageResearcher:
             reverse=True,
         )
 
-    async def _download(
-        self, candidates: list[ImageCandidate], request_id: str, warnings: list[str]
-    ) -> list[ImageCandidate]:
-        async def one(candidate: ImageCandidate) -> ImageCandidate | Exception:
-            try:
-                candidate.local_temp_path = await download_image(candidate.image_url, request_id)
-                return candidate
-            except Exception as exc:
-                return exc
+    def _clip_prompts(self, request: ImageResearchRequest, plan: SearchPlan) -> list[str]:
+        prompts = [
+            request.prompt,
+            plan.main_query,
+            plan.image_type,
+            f"{request.prompt}. {request.style or ''}".strip(),
+            f"{plan.main_query}. {' '.join(plan.visual_requirements)}".strip(),
+        ]
+        prompts.extend(plan.alternative_queries[:4])
+        return [prompt for prompt in prompts if prompt]
 
-        results = await asyncio.gather(*(one(c) for c in candidates))
+    async def _download(
+        self,
+        candidates: list[ImageCandidate],
+        request_id: str,
+        warnings: list[str],
+        scoring_pool_size: int,
+    ) -> list[ImageCandidate]:
         downloaded: list[ImageCandidate] = []
-        for result in results:
-            if isinstance(result, Exception):
-                warnings.append(f"Candidate download failed: {result}")
+        failures: Counter[str] = Counter()
+        wikimedia_rate_limited = False
+
+        for candidate in candidates:
+            if len(downloaded) >= scoring_pool_size:
+                break
+            if wikimedia_rate_limited and candidate.source == "wikimedia":
+                failures["wikimedia skipped after rate limit"] += 1
+                continue
+            try:
+                if candidate.source == "wikimedia":
+                    await asyncio.sleep(0.9)
+                candidate.local_temp_path = await download_image(candidate.image_url, request_id)
+                downloaded.append(candidate)
+            except DownloadError as exc:
+                failures[f"{candidate.source} HTTP {exc.status_code or 'error'}"] += 1
+                if candidate.source == "wikimedia" and exc.status_code == 429:
+                    wikimedia_rate_limited = True
+            except Exception as exc:
+                failures[f"{candidate.source} {type(exc).__name__}"] += 1
+
+        for reason, count in failures.items():
+            if "429" in reason:
+                warnings.append(f"Download rate limited {count} candidate(s): {reason}. Wait briefly or request fewer images.")
             else:
-                downloaded.append(result)
+                warnings.append(f"Download skipped {count} candidate(s): {reason}.")
         return downloaded
 
     def _score(
@@ -193,14 +387,50 @@ class ImageResearcher:
             candidate.clip_score = round(raw, 6)
             metadata = self._metadata_score(candidate, request, plan)
             candidate.final_score = round(
-                normalized * 0.45
-                + metadata * 0.30
+                metadata * 0.46
+                + normalized * 0.29
                 + license_score(candidate.license_name) * 0.10
                 + self._source_score(candidate.source) * 0.10
                 + self._resolution_score(candidate) * 0.05,
                 6,
             )
         return candidates
+
+    def _select_images(
+        self,
+        candidates: list[ImageCandidate],
+        request_id: str,
+        prompt_slug: str,
+        limit: int,
+    ) -> list[SelectedImage]:
+        selected: list[SelectedImage] = []
+        seen_pages: set[str] = set()
+        for candidate in candidates:
+            if not candidate.local_temp_path:
+                continue
+            page_key = candidate.source_url or candidate.image_url
+            if page_key in seen_pages:
+                continue
+            seen_pages.add(page_key)
+            path = copy_ranked_image(candidate.local_temp_path, request_id, len(selected) + 1, prompt_slug)
+            selected.append(
+                SelectedImage(
+                    local_path=f"output/images/{prompt_slug}/{path.name}",
+                    public_url=f"/images/{prompt_slug}/{path.name}",
+                    source=candidate.source,
+                    source_url=candidate.source_url,
+                    image_url=candidate.image_url,
+                    author=candidate.author,
+                    license_name=candidate.license_name,
+                    width=candidate.width,
+                    height=candidate.height,
+                    clip_score=candidate.clip_score,
+                    final_score=candidate.final_score,
+                )
+            )
+            if len(selected) >= limit:
+                break
+        return selected
 
     def _tokens(self, value: str) -> set[str]:
         stop = {
@@ -247,12 +477,19 @@ class ImageResearcher:
         visual_text = " ".join(plan.visual_requirements) if plan else ""
         query_tokens = self._tokens(core_text)
         visual_tokens = self._tokens(visual_text)
+        critical_tokens = self._critical_tokens(plan.main_query if plan else core_text)
+        text_tokens = self._tokens(text)
         if not query_tokens:
             return self._source_score(candidate.source) * 0.25
-        matched = sum(1 for token in query_tokens if token in text)
-        visual_matched = sum(1 for token in visual_tokens if token in text)
+        matched = sum(1 for token in query_tokens if token in text_tokens)
+        visual_matched = sum(1 for token in visual_tokens if token in text_tokens)
+        critical_matched = sum(1 for token in critical_tokens if token in text_tokens)
         score = min(1.0, matched / max(1, len(query_tokens))) * 0.72
         score += min(1.0, visual_matched / max(1, len(visual_tokens))) * 0.12 if visual_tokens else 0
+        if critical_tokens and not critical_matched:
+            score -= 0.42
+        elif critical_tokens:
+            score += min(0.22, critical_matched / len(critical_tokens) * 0.22)
         phrases = []
         if request:
             phrases.append(request.prompt.lower().strip())
@@ -264,10 +501,57 @@ class ImageResearcher:
             score -= 0.25
         if plan and any(term.lower() in text for term in plan.bad_terms):
             score -= 0.35
+        if plan and plan.image_type in {"diagram", "illustration", "icon"}:
+            educational_terms = {
+                "diagram",
+                "anatomy",
+                "structure",
+                "labeled",
+                "labelled",
+                "cross-section",
+                "cross section",
+                "illustration",
+                "educational",
+                "biology",
+                "physiology",
+            }
+            if any(term in text for term in educational_terms):
+                score += 0.22
+            if candidate.source == "pexels":
+                score -= 0.3
+            if candidate.source == "pixabay" and not any(term in text for term in educational_terms):
+                score -= 0.16
         if any(term in text for term in {"reenactment", "replica", "memorial", "statue", "costume"}):
             if plan and any(term in " ".join(plan.visual_requirements).lower() for term in {"authentic", "documentary", "historical"}):
                 score -= 0.22
         return max(0.0, min(1.0, score + self._source_score(candidate.source) * 0.15))
+
+    def _critical_tokens(self, value: str) -> set[str]:
+        generic = {
+            "human",
+            "anatomy",
+            "biology",
+            "structure",
+            "diagram",
+            "labeled",
+            "labelled",
+            "educational",
+            "illustration",
+            "image",
+            "photo",
+            "cross",
+            "section",
+            "system",
+            "official",
+            "performance",
+            "contest",
+            "song",
+        }
+        return {
+            token
+            for token in self._tokens(value)
+            if token not in generic and not token.isdigit()
+        }
 
     def _resolution_score(self, candidate: ImageCandidate) -> float:
         if not candidate.width or not candidate.height:
@@ -282,14 +566,15 @@ class ImageResearcher:
         return {
             "wikimedia": 1.0,
             "openverse": 0.98,
-            "pexels": 0.72,
-            "pixabay": 0.70,
+            "pexels": 0.58,
+            "pixabay": 0.58,
         }.get(source, 0.0)
 
     def _empty(self, search_plan: SearchPlan | None, warnings: list[str]) -> ImageResearchResponse:
         return ImageResearchResponse(
             success=False,
             selected_image=None,
+            selected_images=[],
             search_plan=search_plan,
             candidate_count=0,
             warnings=warnings,

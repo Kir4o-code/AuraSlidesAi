@@ -4,17 +4,23 @@ const progressWrap = document.getElementById("progressWrap");
 const progressBar = document.getElementById("progressBar");
 const statusText = document.getElementById("statusText");
 const result = document.getElementById("result");
+const maxCandidates = document.getElementById("maxCandidates");
+const candidateValue = document.getElementById("candidateValue");
 
 const statuses = [
   "Creating search plan...",
   "Searching image sources...",
   "Scoring candidates...",
-  "Saving best image...",
+  "Saving best images...",
 ];
 
 let timer = null;
 let statusIndex = 0;
 let progress = 0;
+
+function syncCandidateValue() {
+  candidateValue.textContent = maxCandidates.value;
+}
 
 function startProgress() {
   clearInterval(timer);
@@ -41,7 +47,7 @@ function finishProgress() {
 
 function failProgress(message) {
   clearInterval(timer);
-  progressBar.style.background = "#b42318";
+  progressBar.style.background = "#ff5d6c";
   statusText.classList.add("error");
   statusText.textContent = message;
 }
@@ -63,7 +69,8 @@ function renderWarnings(warnings) {
 
 function renderResult(data) {
   result.classList.remove("hidden");
-  if (!data.success || !data.selected_image) {
+  const images = data.selected_images?.length ? data.selected_images : (data.selected_image ? [data.selected_image] : []);
+  if (!data.success || !images.length) {
     result.innerHTML = `
       <h2>No image selected</h2>
       <p>${escapeHtml((data.warnings || ["No result found."])[0])}</p>
@@ -71,17 +78,23 @@ function renderResult(data) {
     `;
     return;
   }
-  const image = data.selected_image;
+  const cards = images.map((image, index) => `
+    <article class="image-card">
+      <img src="${escapeHtml(image.public_url)}" alt="Selected image ${index + 1}" />
+      <div class="image-info">
+        <b>#${index + 1} - ${escapeHtml(image.source)}</b>
+        <span>${escapeHtml(image.author || "Unknown author")}</span>
+        <span>${escapeHtml(image.license_name)} - score ${escapeHtml(image.final_score)}</span>
+        <a href="${escapeHtml(image.source_url)}" target="_blank" rel="noreferrer">Source</a>
+      </div>
+    </article>
+  `).join("");
   result.innerHTML = `
-    <img src="${escapeHtml(image.public_url)}" alt="Selected image" />
-    <div class="meta">
-      <div><strong>Source</strong>${escapeHtml(image.source)}</div>
-      <div><strong>Author</strong>${escapeHtml(image.author || "Unknown")}</div>
-      <div><strong>License</strong>${escapeHtml(image.license_name)}</div>
-      <div><strong>Final score</strong>${escapeHtml(image.final_score)}</div>
-      <div><strong>Dimensions</strong>${escapeHtml(image.width || "?")} x ${escapeHtml(image.height || "?")}</div>
-      <div><strong>Source link</strong><a href="${escapeHtml(image.source_url)}" target="_blank" rel="noreferrer">Open source page</a></div>
+    <div class="result-head">
+      <h2>Selected images</h2>
+      <p>${images.length} saved - ${escapeHtml(data.candidate_count)} scored</p>
     </div>
+    <div class="gallery">${cards}</div>
     ${renderWarnings(data.warnings)}
   `;
 }
@@ -96,7 +109,8 @@ form.addEventListener("submit", async (event) => {
     prompt: document.getElementById("prompt").value.trim(),
     style: document.getElementById("style").value.trim() || null,
     preferred_orientation: document.getElementById("orientation").value,
-    max_candidates: Number(document.getElementById("maxCandidates").value || 12),
+    image_type: document.getElementById("imageType").value,
+    max_candidates: Number(maxCandidates.value || 6),
   };
 
   try {
@@ -115,3 +129,6 @@ form.addEventListener("submit", async (event) => {
     submitBtn.disabled = false;
   }
 });
+
+maxCandidates.addEventListener("input", syncCandidateValue);
+syncCandidateValue();

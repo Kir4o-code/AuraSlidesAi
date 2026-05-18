@@ -9,14 +9,17 @@ class PixabayProvider(BaseImageProvider):
         self.api_key = api_key
 
     async def search(
-        self, query: str, per_page: int, orientation: str | None
+        self, query: str, per_page: int, orientation: str | None, image_type: str | None = None
     ) -> list[ImageCandidate]:
+        pixabay_type = "photo"
+        if image_type in {"illustration", "icon", "diagram"}:
+            pixabay_type = "illustration"
         params = {
             "key": self.api_key,
             "q": query,
             "per_page": min(max(per_page, 3), 200),
             "safesearch": "true",
-            "image_type": "photo",
+            "image_type": pixabay_type,
         }
         if orientation and orientation in {"horizontal", "vertical"}:
             params["orientation"] = orientation

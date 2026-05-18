@@ -24,6 +24,8 @@ class Settings:
     groq_model: str = os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile"
     pexels_api_key: str | None = env_value("PEXELS_API_KEY")
     pixabay_api_key: str | None = env_value("PIXABAY_API_KEY")
+    openverse_client_id: str | None = env_value("OPENVERSE_CLIENT_ID")
+    openverse_client_secret: str | None = env_value("OPENVERSE_CLIENT_SECRET")
     clip_model: str = os.getenv("CLIP_MODEL") or "openai/clip-vit-base-patch32"
 
 

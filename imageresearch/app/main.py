@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -9,6 +11,10 @@ from app.core.storage import ensure_output_dirs
 from app.schemas import ImageResearchRequest, ImageResearchResponse
 
 ensure_output_dirs()
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 
 app = FastAPI(title="Image Researcher")
 app.add_middleware(

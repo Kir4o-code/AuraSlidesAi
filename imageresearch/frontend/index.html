@@ -9,25 +9,28 @@
   <body>
     <main class="shell">
       <section class="panel">
-        <header>
-          <h1>Image Researcher</h1>
-          <p>Find a safe, free image that matches a generic visual request.</p>
+        <header class="hero">
+          <div>
+            <p class="eyebrow">licensed visual search</p>
+            <h1>Image Researcher</h1>
+          </div>
+          <p>Exact-source search, local scoring, clean exports.</p>
         </header>
 
         <form id="researchForm">
-          <label>
-            Image prompt
+          <label class="field">
+            <span class="field-title">Image prompt</span>
             <textarea id="prompt" required rows="4" placeholder="a cozy futuristic city at night with soft lights"></textarea>
           </label>
 
-          <label>
-            Style
+          <label class="field">
+            <span class="field-title">Style</span>
             <input id="style" type="text" placeholder="realistic, cinematic, high quality" />
           </label>
 
-          <div class="grid">
-            <label>
-              Orientation
+          <div class="split">
+            <label class="field">
+              <span class="field-title">Orientation</span>
               <select id="orientation">
                 <option value="any">any</option>
                 <option value="landscape">landscape</option>
@@ -36,9 +39,24 @@
               </select>
             </label>
 
-            <label>
-              Max candidates
-              <input id="maxCandidates" type="number" min="1" max="50" value="12" />
+            <label class="field">
+              <span class="field-title">Type</span>
+              <select id="imageType">
+                <option value="any">any</option>
+                <option value="photo">photo</option>
+                <option value="diagram">diagram</option>
+                <option value="illustration">illustration</option>
+                <option value="icon">icon</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span class="field-title">
+                Images
+                <output id="candidateValue">6</output>
+              </span>
+              <input id="maxCandidates" type="range" min="1" max="24" value="6" />
+              <span class="range-scale"><span>1</span><span>12</span><span>24</span></span>
             </label>
           </div>
 

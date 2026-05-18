@@ -9,7 +9,7 @@ class PexelsProvider(BaseImageProvider):
         self.api_key = api_key
 
     async def search(
-        self, query: str, per_page: int, orientation: str | None
+        self, query: str, per_page: int, orientation: str | None, image_type: str | None = None
     ) -> list[ImageCandidate]:
         params = {"query": query, "per_page": per_page}
         if orientation and orientation != "any":
@@ -41,7 +41,7 @@ class PexelsProvider(BaseImageProvider):
                     license_url="https://www.pexels.com/license/",
                     width=item.get("width"),
                     height=item.get("height"),
-                    tags=[query],
+                    tags=[],
                 )
             )
         return out

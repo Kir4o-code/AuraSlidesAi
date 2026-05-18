@@ -25,13 +25,19 @@ class ClipScorer:
         self.model.eval()
 
     def score_images(self, image_paths: list[str], text_prompt: str) -> list[float]:
+        return self.score_images_against_texts(image_paths, [text_prompt])
+
+    def score_images_against_texts(self, image_paths: list[str], text_prompts: list[str]) -> list[float]:
         if not image_paths:
             return []
+        prompts = [prompt for prompt in text_prompts if prompt.strip()]
+        if not prompts:
+            return [0.0 for _ in image_paths]
         self._load()
         assert self.model and self.processor
         images = [Image.open(Path(path)).convert("RGB") for path in image_paths]
         inputs = self.processor(
-            text=[text_prompt],
+            text=prompts,
             images=images,
             return_tensors="pt",
             padding=True,
@@ -44,7 +50,7 @@ class ClipScorer:
             )
             image_features = image_features / image_features.norm(dim=-1, keepdim=True)
             text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-            scores = image_features @ text_features.T
+            scores = (image_features @ text_features.T).max(dim=1).values
         for img in images:
             img.close()
-        return [float(score) for score in scores.squeeze(-1).detach().cpu().tolist()]
+        return [float(score) for score in scores.detach().cpu().tolist()]
