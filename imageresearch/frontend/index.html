@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Image Researcher</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <header>
+          <h1>Image Researcher</h1>
+          <p>Find a safe, free image that matches a generic visual request.</p>
+        </header>
+
+        <form id="researchForm">
+          <label>
+            Image prompt
+            <textarea id="prompt" required rows="4" placeholder="a cozy futuristic city at night with soft lights"></textarea>
+          </label>
+
+          <label>
+            Style
+            <input id="style" type="text" placeholder="realistic, cinematic, high quality" />
+          </label>
+
+          <div class="grid">
+            <label>
+              Orientation
+              <select id="orientation">
+                <option value="any">any</option>
+                <option value="landscape">landscape</option>
+                <option value="portrait">portrait</option>
+                <option value="square">square</option>
+              </select>
+            </label>
+
+            <label>
+              Max candidates
+              <input id="maxCandidates" type="number" min="1" max="50" value="12" />
+            </label>
+          </div>
+
+          <button id="submitBtn" type="submit">Research Image</button>
+        </form>
+
+        <div id="progressWrap" class="progress-wrap hidden">
+          <div class="progress-track"><div id="progressBar"></div></div>
+          <div id="statusText" class="status">Creating search plan...</div>
+        </div>
+      </section>
+
+      <section id="result" class="result hidden"></section>
+    </main>
+    <script src="/static/script.js"></script>
+  </body>
+</html>

@@ -1,0 +1,26 @@
+1. Open PowerShell in:
+   C:\Users\gtxr1\AuraSlidesAi\AuraSlidesAi\imageresearch
+2. Create venv:
+   python -m venv .venv
+3. Activate:
+   .venv\Scripts\activate
+4. Install:
+   pip install -r requirements.txt
+5. Create .env:
+   copy .env.example .env
+6. Add API keys.
+7. Run:
+   uvicorn app.main:app --reload --port 8010
+8. Open:
+   http://127.0.0.1:8010
+9. Images are saved in:
+   output/images
+10. Metadata is saved in:
+   output/metadata
+
+Common issues:
+- First CLIP model load may take time.
+- Torch installation may be slow.
+- Missing Pexels/Pixabay keys means fewer or no results.
+- If no candidates are found, try a simpler prompt.
+- If the frontend loads but no image appears, check terminal warnings.
