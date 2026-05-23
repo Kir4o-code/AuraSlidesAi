@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.env
+.env.local
+.env.example
+.DS_Store
+
+backend/generated/*.pdf
+!backend/generated/.gitkeep
+backend/generated/image_research/
+
+frontend/.next/
+frontend/node_modules/

@@ -1,0 +1,11 @@
+<div class="slide__content">
+  <div class="section-label">Conclusion</div>
+  <h2 class="heading">{{ slide.title }}</h2>
+  <ul class="bullet-list">
+    {% for bullet in slide.bullets %}
+    <li>{{ bullet }}</li>
+    {% endfor %}
+  </ul>
+  <p class="closing">{{ slide.closing }}</p>
+</div>
+

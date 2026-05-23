@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ presentation.title }}</title>
+  </head>
+  <body
+    class="theme theme--{{ theme_tokens.style_name }}"
+    style="
+      --bg-start: {{ theme_tokens.bg_start }};
+      --bg-end: {{ theme_tokens.bg_end }};
+      --panel: {{ theme_tokens.panel }};
+      --text: {{ theme_tokens.text }};
+      --muted: {{ theme_tokens.muted }};
+      --accent: {{ theme_tokens.accent }};
+      --accent-strong: {{ theme_tokens.accent_strong }};
+      --accent-soft: {{ theme_tokens.accent_soft }};
+      --border: {{ theme_tokens.border }};
+      --accent-rgb: {{ theme_tokens.accent_rgb }};
+      --font-display: '{{ theme_tokens.font }}', 'Segoe UI', sans-serif;
+    "
+  >
+    {% for slide in slides %}
+    <section class="slide slide--{{ slide.layout }}">
+      <div class="slide__glow slide__glow--one"></div>
+      <div class="slide__glow slide__glow--two"></div>
+      <div class="slide__theme-bar"></div>
+      {% include slide.template_name %}
+    </section>
+    {% endfor %}
+  </body>
+</html>
