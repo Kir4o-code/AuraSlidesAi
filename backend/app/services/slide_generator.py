@@ -21,7 +21,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 DEBUG_DIR = OUTPUT_DIR / "debug"
 DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger(__name__)
-PDF_TEXT_SCALE = 1.08
+PDF_TEXT_SCALE = 1.3
 
 env = Environment(
     loader=FileSystemLoader(TEMPLATES_DIR),
@@ -74,27 +74,27 @@ def _slide_text_sizes(data: dict[str, Any]) -> dict[str, int]:
         scale = _scale_for_length(len(title), [(120, 0.82), (85, 0.9), (60, 0.95)])
         subtitle_scale = _scale_for_length(len(subtitle), [(140, 0.82), (90, 0.9)], 1.0)
         return {
-            "title_font_size": _scaled_font_size(46 * scale),
-            "subtitle_font_size": _scaled_font_size(20 * subtitle_scale),
+            "title_font_size": _scaled_font_size(40 * scale),
+            "subtitle_font_size": _scaled_font_size(18 * subtitle_scale),
         }
 
     if slide_type in {"title_bullets", "title_bullets_image", "comparison", "hero_image", "timeline", "statistics"}:
         scale = _scale_for_length(len(title), [(120, 0.82), (85, 0.9), (60, 0.95)])
         body_scale = _scale_for_length(total_length, [(260, 0.85), (180, 0.92)], 1.0)
         heading_size = {
-            "title_bullets": 34,
-            "title_bullets_image": 32,
-            "hero_image": 38,
-            "comparison": 32,
-            "timeline": 32,
-            "statistics": 32,
-        }.get(slide_type, 32)
+            "title_bullets": 28,
+            "title_bullets_image": 26,
+            "hero_image": 32,
+            "comparison": 26,
+            "timeline": 26,
+            "statistics": 26,
+        }.get(slide_type, 26)
         return {
             "heading_font_size": _scaled_font_size(heading_size * scale),
-            "body_font_size": _scaled_font_size(18 * body_scale),
-            "small_font_size": _scaled_font_size(13 * body_scale),
-            "card_font_size": _scaled_font_size(14 * body_scale),
-            "value_font_size": _scaled_font_size(30 * body_scale),
+            "body_font_size": _scaled_font_size(16 * body_scale),
+            "small_font_size": _scaled_font_size(12 * body_scale),
+            "card_font_size": _scaled_font_size(13 * body_scale),
+            "value_font_size": _scaled_font_size(26 * body_scale),
         }
 
     if slide_type == "quote":

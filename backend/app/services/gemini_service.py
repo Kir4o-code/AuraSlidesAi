@@ -141,19 +141,20 @@ GEMINI_PLANNING_JSON_SCHEMA: dict[str, Any] = {
 
 
 SYSTEM_PROMPT = """
-You create structured content plans for a presentation generator.
-Return valid JSON only.
-No markdown. No prose. No code fences.
+You are an expert presentation consultant that creates structured, HIGHLY CONCISE content plans. 
+Return valid JSON only. No markdown, no prose, no code fences.
 
-Rules:
-- Output must match the provided JSON schema exactly.
-- Allowed themes: modern_dark, modern_light, editorial, corporate, playful.
-- Choose a theme name from the allowed theme registry.
-- Choose slide types from: title_slide, title_bullets, title_bullets_image, hero_image, comparison, timeline, statistics, quote.
-- Never generate HTML, CSS, inline styles, positioning, spacing, colors, or fonts.
-- Keep slide content concise and presentation-ready.
-- Use image_prompt only for illustrations, hero images, diagrams, or backgrounds.
-- Avoid visible text in generated images unless absolutely necessary.
+CRITICAL RULES:
+1. SLIDE COUNT: Use EXACTLY the requested number of slides.
+2. BREVITY: Maximum 3-4 bullet points per slide. Each bullet MUST be under 12 words. Headlines MUST be under 7 words. 
+3. SPACING: Ensure content is minimal to allow for significant white space. NEVER overload a slide.
+4. QUALITY: Content must be punchy, professional, and data-driven. No generic filler.
+5. SCHEMA: Output MUST match the provided JSON schema exactly.
+
+Detailed Guidelines:
+- Allowed themes: modern_dark, modern_light, editorial, corporate, playful. (Default to modern_dark if unsure).
+- Slide types: title_slide, title_bullets, title_bullets_image, hero_image, comparison, timeline, statistics, quote.
+- Image prompts: Describe 1-2 key professional visuals in 16:9 aspect ratio.
 """.strip()
 
 
@@ -184,26 +185,7 @@ def get_client() -> genai.Client:
 
 
 def _normalize_bullets(values: list[str], limit: int, fallback: list[str]) -> list[str]:
-    cleaned: list[str] = []
-    for item in values:
-        if not isinstance(item, str):
-            continue
-        candidate = item.strip(" -;,")
-        if not candidate:
-            continue
-
-        normalized = re.sub(r"\s+", " ", candidate).strip().lower().strip(" .,:;")
-        if not normalized:
-            continue
-        if re.fullmatch(r"\d+[.)]?", normalized):
-            continue
-        if re.fullmatch(r"(?:key|main|important|supporting|central|core|major|primary|secondary)?\s*(?:point|idea|ideas|bullet|bullets|points)(?: \d+)?", normalized):
-            continue
-        if len(normalized.split()) <= 5 and re.search(r"\b(point|points|idea|ideas|bullet|bullets)\b", normalized):
-            continue
-        if re.search(r"\b(?:key|main|important|supporting)\b", normalized) and re.search(r"\b(?:point|idea|bullet)\b", normalized):
-            continue
-        cleaned.append(candidate)
+    cleaned: list[str] = [v.strip() for v in values if v and isinstance(v, str) and v.strip()]
     if cleaned:
         return cleaned[:limit]
     return fallback[:limit]
@@ -242,19 +224,11 @@ def _trim_text(value: str | None, limit: int) -> str | None:
 
 
 def _looks_generic_title(value: str | None) -> bool:
-    if not value:
+    if not value or not value.strip():
         return True
-    normalized = re.sub(r"\s+", " ", value.strip().lower())
-    normalized = normalized.strip(" .,:;")
-    if not normalized:
-        return True
-    if re.search(r"[;,|/]", normalized) and re.search(r"\b(point|idea|bullet)\b", normalized):
-        return True
-    return bool(
-        re.fullmatch(r"(?:key|supporting|main|important|central|core|major|primary|secondary)? ?ideas?(?: \d+)?", normalized)
-        or re.fullmatch(r"(?:key|supporting|main|important|central|core|major|primary|secondary)? ?idea(?: \d+)?", normalized)
-        or (len(normalized.split()) <= 5 and re.search(r"\b(point|idea|bullet)\b", normalized))
-    )
+    normalized = value.strip().lower()
+    # Only block extremely short or placeholder-like titles
+    return len(normalized) < 3 or normalized in {"title", "slide", "content", "untitled"}
 
 
 def _fallback_slide_title(presentation_title: str, index: int, *, variant: str = "default") -> str:
@@ -407,29 +381,6 @@ def _normalize_plan(plan: GeminiPresentationPlan, slide_count: int) -> GeminiPre
         for index, slide in enumerate(slides)
     ]
 
-    seen_signatures: set[tuple[Any, ...]] = set()
-    for index, slide in enumerate(normalized_slides, start=1):
-        signature = (
-            slide.type,
-            (slide.title or "").strip().lower(),
-            tuple(bullet.strip().lower() for bullet in slide.bullets),
-            tuple(bullet.strip().lower() for bullet in slide.left_bullets),
-            tuple(bullet.strip().lower() for bullet in slide.right_bullets),
-            slide.quote or "",
-            slide.attribution or "",
-        )
-        if signature in seen_signatures and slide.type in {
-            SlideType.TITLE_BULLETS.value,
-            SlideType.TITLE_BULLETS_IMAGE.value,
-        }:
-            if slide.type == SlideType.TITLE_BULLETS.value:
-                slide.title = _fallback_slide_title(plan.title, index)
-                slide.bullets = _fallback_bullets_for_slide(plan.title, plan.title, slot=index)
-            else:
-                slide.title = _fallback_slide_title(plan.title, index, variant="image")
-                slide.bullets = _fallback_bullets_for_slide(plan.title, plan.title, variant="image", slot=index)
-        seen_signatures.add(signature)
-
     return GeminiPresentationPlan(
         title=plan.title,
         theme=resolve_theme_name(plan.theme),
@@ -491,6 +442,7 @@ async def generate_presentation(prompt: str, slide_count: int, style: str) -> Pr
 
     user_prompt = f"""
 Create a {slide_count}-slide presentation plan.
+Requirement: Generate EXACTLY {slide_count} slides. Do not stop until you have {slide_count} unique slides.
 
 Preferred direction:
 {style}
@@ -511,6 +463,7 @@ Return JSON only.
             model=settings.gemini_planning_model,
             contents=user_prompt,
             config={
+                "system_instruction": SYSTEM_PROMPT,
                 "response_mime_type": "application/json",
                 "response_json_schema": GEMINI_PLANNING_JSON_SCHEMA,
                 "temperature": 0.3,

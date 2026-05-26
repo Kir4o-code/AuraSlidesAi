@@ -65,7 +65,7 @@ export function PromptForm({
         />
       </label>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-1">
         <label className="block">
           <span className="mb-2 block text-sm font-medium text-slate-700">
             Slide count
@@ -75,26 +75,9 @@ export function PromptForm({
             min={3}
             max={10}
             value={slideCount}
-            onChange={(event) => setSlideCount(Number(event.target.value))}
+            onChange={(event) => setPrompt(event.target.value)}
             className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-spark focus:bg-white"
           />
-        </label>
-
-        <label className="block">
-          <span className="mb-2 block text-sm font-medium text-slate-700">
-            Theme hint
-          </span>
-          <select
-            value={style}
-            onChange={(event) => setStyle(event.target.value)}
-            className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-spark focus:bg-white"
-          >
-            {STYLE_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
         </label>
       </div>
 

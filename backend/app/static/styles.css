@@ -3,21 +3,25 @@
   margin: 0;
 }
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap');
+
 * {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  font-family: 'Inter', sans-serif;
 }
 
 .slide {
   position: relative;
   width: 1280px;
   height: 720px;
-  padding: 44px 56px;
+  padding: 120px 140px;
   page-break-after: always;
   overflow: hidden;
+  font-family: 'Inter', sans-serif;
 }
 
 .slide:last-child {
@@ -59,12 +63,14 @@ body {
   height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
+  gap: 80px;
 }
 
 .slide__content--center {
   align-items: center;
   text-align: center;
+  justify-content: center;
 }
 
 .eyebrow,
@@ -77,11 +83,13 @@ body {
 }
 
 .title {
-  max-width: 860px;
+  max-width: 1000px;
   margin: 0;
-  font-size: 58px;
-  line-height: 1.05;
+  font-size: 64px;
+  line-height: 1.1;
   letter-spacing: -0.04em;
+  font-weight: 800;
+  font-family: 'Plus Jakarta Sans', sans-serif;
 }
 
 .subtitle {
@@ -97,6 +105,7 @@ body {
   font-size: 42px;
   line-height: 1.12;
   letter-spacing: -0.03em;
+  font-family: 'Plus Jakarta Sans', sans-serif;
 }
 
 .bullet-list {
@@ -113,9 +122,9 @@ body {
 
 .split-layout {
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 36px;
-  align-items: center;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 60px;
+  align-items: start;
 }
 
 .image-card,
@@ -181,9 +190,9 @@ body {
 
 .image-focus-layout {
   display: grid;
-  grid-template-columns: 0.9fr 1.1fr;
-  gap: 36px;
-  align-items: center;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: start;
 }
 
 .comparison-layout {

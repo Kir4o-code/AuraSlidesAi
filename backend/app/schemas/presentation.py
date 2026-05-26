@@ -69,8 +69,8 @@ class Slide(BaseModel):
     right_bullets: list[str] = Field(default_factory=list, max_length=6)
     timeline: list[TimelineStep] = Field(default_factory=list)
     statistics: list[StatisticItem] = Field(default_factory=list)
-    quote: str | None = Field(default=None, max_length=260)
-    attribution: str | None = Field(default=None, max_length=140)
+    quote: str | None = Field(default=None, max_length=400)
+    attribution: str | None = Field(default=None, max_length=250)
     resolved_image: ResolvedImageAsset | None = None
 
     @model_validator(mode="after")
