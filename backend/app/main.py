@@ -7,13 +7,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.routes.presentations import router as presentations_router
-from app.services.slide_generator import OUTPUT_DIR
-
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 logging.basicConfig(level=logging.INFO)
+
+from app.routes.presentations import router as presentations_router
+from app.services.slide_generator import OUTPUT_DIR
 
 app = FastAPI(
     title="AuraSlides AI API",

@@ -5,6 +5,7 @@ import type {
   PresentationSlide,
   SlideType,
 } from "@/lib/api";
+import { resolveApiAssetUrl } from "@/lib/api";
 import { buildThemeStyle, resolveThemeTokens } from "@/lib/theme";
 
 interface SlideRendererProps {
@@ -54,7 +55,7 @@ function SlideShell({
 }
 
 function SlideImage({ slide, tokens, exportMode }: SlideRendererProps & { tokens: ReturnType<typeof resolveThemeTokens> }) {
-  const imageUrl = slide.resolved_image?.public_url;
+  const imageUrl = resolveApiAssetUrl(slide.resolved_image?.public_url);
   const alt = slide.resolved_image?.image_url ?? slide.image_prompt ?? slide.title ?? slide.type;
 
   if (imageUrl) {

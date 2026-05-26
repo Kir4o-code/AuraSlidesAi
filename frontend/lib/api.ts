@@ -87,6 +87,16 @@ export interface ProgressState {
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
+export function resolveApiAssetUrl(url: string | null | undefined): string | undefined {
+  if (!url) {
+    return undefined;
+  }
+  if (/^https?:\/\//i.test(url) || url.startsWith("data:")) {
+    return url;
+  }
+  return `${API_BASE_URL.replace(/\/$/, "")}/${url.replace(/^\//, "")}`;
+}
+
 export async function generatePresentation(
   payload: GeneratePresentationPayload,
 ): Promise<GeneratePresentationResponse> {

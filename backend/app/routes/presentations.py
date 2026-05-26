@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from time import perf_counter
 from uuid import uuid4
@@ -13,6 +14,7 @@ from app.services.gemini_service import (
 )
 from app.services.image_service import enrich_presentation_images
 from app.services.pdf_exporter import PdfExportError
+from app.services.react_exporter import ReactExportError
 from app.services.slide_generator import build_presentation_exports
 
 
@@ -46,7 +48,7 @@ async def generate_presentation_route(
         )
         presentation = await enrich_presentation_images(presentation)
         logger.info("[%s] Gemini planning complete. Rendering PPTX and PDF.", request_id)
-        pptx_name, pdf_name = build_presentation_exports(presentation)
+        pptx_name, pdf_name = await asyncio.to_thread(build_presentation_exports, presentation)
         logger.info(
             "[%s] Presentation export complete. pptx=%s pdf=%s duration=%.2fs",
             request_id,
@@ -74,6 +76,12 @@ async def generate_presentation_route(
         ) from exc
     except PdfExportError as exc:
         logger.exception("[%s] PDF export error.", request_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+    except ReactExportError as exc:
+        logger.exception("[%s] React export error.", request_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),

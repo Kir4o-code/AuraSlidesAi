@@ -7,10 +7,9 @@ from google.genai import errors, types
 
 
 PROMPT = (
-    "Create a clean modern presentation-style illustration for an AI startup "
-    "pitch deck slide about artificial intelligence automation. Minimal design, "
-    "futuristic UI elements, professional lighting, blue and purple gradients, "
-    "presentation-ready, 16:9 composition."
+    "Create a grounded presentation visual for a slide about small business "
+    "automation: a tidy desk with a laptop, calendar, and organized workflow "
+    "materials in a real office setting. Clean modern deck style, 16:9, no text."
 )
 OUTPUT_FILE = Path("generated_test_image.png")
 
@@ -70,7 +69,7 @@ def main() -> int:
         client = genai.Client(api_key=api_key)
 
         response = client.models.generate_content(
-            model="gemini-3-pro-image-preview",
+            model="gemini-2.5-flash-image",
             contents=PROMPT,
             config=types.GenerateContentConfig(
                 response_modalities=["TEXT", "IMAGE"],

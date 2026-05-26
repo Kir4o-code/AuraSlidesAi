@@ -19,3 +19,36 @@ pre {
   word-break: break-word;
 }
 
+.export-page {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.export-page--single {
+  width: 1280px;
+  height: 720px;
+  overflow: hidden;
+}
+
+.export-page--deck {
+  width: 1280px;
+}
+
+@page {
+  size: 1280px 720px;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body {
+    width: 1280px;
+    margin: 0;
+    background: #ffffff;
+  }
+
+  .export-page {
+    width: 1280px;
+  }
+}
+

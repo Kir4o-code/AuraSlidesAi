@@ -30,7 +30,7 @@ class GeminiSettings(BaseSettings):
 
     gemini_api_key: str
     gemini_planning_model: str = "gemini-2.5-flash"
-    gemini_image_model: str = "gemini-3-pro-image-preview"
+    gemini_image_model: str = "gemini-2.5-flash-image"
 
 
 class GeminiServiceError(Exception):
@@ -144,22 +144,23 @@ GEMINI_PLANNING_JSON_SCHEMA: dict[str, Any] = {
 
 
 SYSTEM_PROMPT = """
-You are an expert presentation consultant that creates structured, HIGHLY CONCISE content plans. 
+You are an expert presentation consultant that creates structured, HIGHLY CONCISE content plans.
 Return valid JSON only. No markdown, no prose, no code fences.
 
 CRITICAL RULES:
 1. SLIDE COUNT: Use EXACTLY the requested number of slides.
-2. BREVITY: Maximum 3-4 bullet points per slide. Each bullet MUST be under 12 words. Headlines MUST be under 7 words. 
+2. BREVITY: Maximum 3-4 bullet points per slide. Each bullet MUST be under 12 words. Headlines MUST be under 7 words.
 3. SPACING: Ensure content is minimal to allow for significant white space. NEVER overload a slide.
-4. QUALITY: Content must be punchy, professional, and data-driven. No generic filler.
+4. QUALITY: Content must be punchy, professional, and specific. No generic filler.
 5. SCHEMA: Output MUST match the provided JSON schema exactly.
 
 IMAGE PROMPT RULES (EXTREMELY IMPORTANT):
-- NO METAPHORS OR ALLEGORIES. NO floating gears, random math symbols (Δ, ∇, etc.), or AI-hallucinated abstracts.
-- USE REALISM: Photography of professional environments, high-quality architectural shots, or CLEAN, ACCURATE technical diagrams.
-- MATH ACCURACY: If the topic is Math/Physics, describe a visual of a REAL equation in a professional textbook style or a realistic graph.
-- NO AI TRASH: No "conceptual visualizations" that look like 2010 AI art.
-- STYLE: Describe modern, high-resolution (8k), professional photography or 2D technical illustrations.
+- Image prompts must feel like they belong in a polished presentation, not an AI art gallery.
+- Prefer grounded editorial visuals: realistic scenes, relevant objects, clean environments, charts, product/process context, or restrained diagrams.
+- Think logically about the slide: ask for the image a presenter would actually place beside that point.
+- Avoid "8k", camera flex, hype words, floating icons, surreal metaphors, generic neural networks, random math symbols, and glowing abstract backgrounds.
+- Do not ask for visible text, labels, captions, UI copy, or words inside the image unless the slide truly needs a simple chart-like visual.
+- For sensitive topics, keep visuals respectful, realistic, and non-sensational.
 """.strip()
 
 
@@ -226,6 +227,46 @@ def _trim_text(value: str | None, limit: int) -> str | None:
     if not cleaned:
         return None
     return cleaned[:limit]
+
+
+def _fallback_image_prompt(title: str | None, presentation_title: str, *, slide_type: str = "supporting") -> str:
+    topic = title or presentation_title or "the slide topic"
+    if slide_type == SlideType.HERO_IMAGE.value:
+        return f"Grounded editorial visual introducing {topic}, realistic and presentation-ready, no text."
+    return f"Grounded supporting visual for {topic}, realistic or clean editorial style, no text."
+
+
+def _normalize_image_prompt(raw_prompt: str | None, title: str | None, presentation_title: str, *, slide_type: str = "supporting") -> str:
+    base = (raw_prompt or "").strip() or _fallback_image_prompt(title, presentation_title, slide_type=slide_type)
+    if re.search(
+        r"\b(neural networks?|glowing|floating|surreal|abstract|futuristic|random symbols?|ai art|conceptual visualization)\b",
+        base,
+        flags=re.IGNORECASE,
+    ):
+        base = _fallback_image_prompt(title, presentation_title, slide_type=slide_type)
+    for pattern in [
+        r"\b8k\b",
+        r"\b4k\b",
+        r"\bultra[- ]?high[- ]?resolution\b",
+        r"\bhigh[- ]?resolution\b",
+        r"\baward[- ]?winning\b",
+        r"\btrending on artstation\b",
+        r"\boctane render\b",
+        r"\bhyper[- ]?realistic\b",
+        r"\bfuturistic\b",
+    ]:
+        base = re.sub(pattern, "", base, flags=re.IGNORECASE)
+    base = re.sub(r"\s+,", ",", base)
+    base = re.sub(r",\s*,+", ",", base)
+    base = re.sub(r"\s+", " ", base).strip(" ,.")
+
+    topic = title or presentation_title or "this slide"
+    prompt = (
+        f"Presentation visual for '{topic}': {base}. "
+        "Keep it grounded, relevant, and restrained. Match a clean modern deck. "
+        "No visible words, labels, captions, logos, surreal symbols, or generic AI abstractions."
+    )
+    return prompt[:500].rstrip(" ,.")
 
 
 def _looks_generic_title(value: str | None) -> bool:
@@ -310,7 +351,7 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
             limit=5,
             fallback=_fallback_bullets_for_slide(slide.title or presentation_title, presentation_title, variant="image", slot=index),
         )
-        slide.image_prompt = slide.image_prompt or f"Modern presentation illustration for {slide.title}"
+        slide.image_prompt = _normalize_image_prompt(slide.image_prompt, slide.title, presentation_title)
     elif slide.type == SlideType.TITLE_BULLETS_IMAGE.value:
         slide.title = slide.title if not _looks_generic_title(slide.title) else _fallback_slide_title(presentation_title, index, variant="image")
         slide.bullets = _normalize_bullets(
@@ -318,10 +359,10 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
             limit=5,
             fallback=_fallback_bullets_for_slide(slide.title or presentation_title, presentation_title, variant="image", slot=index),
         )
-        slide.image_prompt = slide.image_prompt or f"Modern presentation illustration for {slide.title}"
+        slide.image_prompt = _normalize_image_prompt(slide.image_prompt, slide.title, presentation_title)
     elif slide.type == SlideType.HERO_IMAGE.value:
         slide.title = slide.title or "Visual focus"
-        slide.image_prompt = slide.image_prompt or f"Modern presentation hero image for {slide.title}"
+        slide.image_prompt = _normalize_image_prompt(slide.image_prompt, slide.title, presentation_title, slide_type=SlideType.HERO_IMAGE.value)
         slide.subtitle = slide.subtitle or ""
     elif slide.type == SlideType.COMPARISON.value:
         slide.title = slide.title or "Comparison"
@@ -361,7 +402,7 @@ def _normalize_plan(plan: GeminiPresentationPlan, slide_count: int) -> GeminiPre
                 type=SlideType.TITLE_BULLETS_IMAGE.value,
                 title=_fallback_slide_title(plan.title, 2, variant="image"),
                 bullets=_fallback_bullets_for_slide(plan.title, plan.title, variant="image", slot=2),
-                image_prompt=f"Modern presentation illustration for {plan.title}",
+                image_prompt=_fallback_image_prompt(_fallback_slide_title(plan.title, 2, variant="image"), plan.title),
             ),
             GeminiSlidePlan(
                 type=SlideType.QUOTE.value,
@@ -380,7 +421,7 @@ def _normalize_plan(plan: GeminiPresentationPlan, slide_count: int) -> GeminiPre
                 type=SlideType.TITLE_BULLETS_IMAGE.value,
                 title=_fallback_slide_title(plan.title, len(slides) + 1, variant="image"),
                 bullets=_fallback_bullets_for_slide(plan.title, plan.title, variant="image", slot=len(slides) + 1),
-                image_prompt=f"Modern presentation illustration for {plan.title}",
+                image_prompt=_fallback_image_prompt(_fallback_slide_title(plan.title, len(slides) + 1, variant="image"), plan.title),
             )
         )
 
@@ -404,7 +445,7 @@ def _normalize_plan(plan: GeminiPresentationPlan, slide_count: int) -> GeminiPre
         if signature in seen_signatures and slide.type == SlideType.TITLE_BULLETS_IMAGE.value:
             slide.title = _fallback_slide_title(plan.title, index, variant="image")
             slide.bullets = _fallback_bullets_for_slide(plan.title, plan.title, variant="image", slot=index)
-            slide.image_prompt = slide.image_prompt or f"Modern presentation illustration for {slide.title}"
+            slide.image_prompt = _normalize_image_prompt(slide.image_prompt, slide.title, plan.title)
         seen_signatures.add(signature)
 
     return GeminiPresentationPlan(
@@ -576,8 +617,10 @@ async def generate_slide_image(prompt: str) -> bytes:
     settings = get_settings()
     client = get_client()
     final_prompt = (
-        "Create a clean, modern, presentation-ready visual for a slide deck. "
-        "Use a 16:9 composition. Do not render visible text, labels, captions, or UI copy in the image. "
+        "Create one grounded, presentation-ready 16:9 visual. "
+        "It should feel like a real slide asset: relevant, restrained, and clean. "
+        "Avoid generic AI art, glowing abstract backgrounds, floating icons, and sensational stock-photo cliches. "
+        "Do not render visible text, labels, captions, logos, or UI copy. "
         f"Prompt: {prompt}"
     )
 
@@ -601,3 +644,4 @@ async def generate_slide_image(prompt: str) -> bytes:
         raise
     except Exception as exc:
         raise GeminiImageGenerationError(_provider_message(exc)) from exc
+

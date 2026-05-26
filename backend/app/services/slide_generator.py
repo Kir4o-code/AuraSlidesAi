@@ -8,8 +8,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.schemas.presentation import Presentation
 from app.services.image_service import build_image_context
-from app.services.pdf_exporter import export_pdf
-from app.services.pptx_generator import build_pptx
+from app.services.react_exporter import build_react_presentation_exports
 from app.services.theme_registry import get_theme_tokens
 
 
@@ -179,25 +178,9 @@ def render_presentation_html(presentation: Presentation) -> str:
 
 
 def build_presentation_exports(presentation: Presentation) -> tuple[str, str]:
-    logger.info("Starting PPTX-first slide rendering and PDF build.")
-    html = render_presentation_html(presentation)
     asset_id = uuid4().hex
-    pptx_name = build_pptx(presentation, asset_id=asset_id)
-    pptx_path = OUTPUT_DIR / pptx_name
-    pdf_name = f"{asset_id}.pdf"
-    output_path = OUTPUT_DIR / pdf_name
-    debug_html_path = DEBUG_DIR / f"{asset_id}.html"
-    css_path = STATIC_DIR / "styles.css"
-    debug_html_path.write_text(html, encoding="utf-8")
-    logger.info("Saved debug HTML snapshot to %s", debug_html_path)
-    export_pdf(
-        pptx_path,
-        output_path,
-        html_fallback=html,
-        css_path=css_path,
-        base_url=APP_DIR,
-    )
-    return pptx_name, pdf_name
+    logger.info("Starting React-first PPTX and PDF build. asset_id=%s", asset_id)
+    return build_react_presentation_exports(presentation, asset_id)
 
 
 def build_pdf(presentation: Presentation) -> str:

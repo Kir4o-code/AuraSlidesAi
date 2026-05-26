@@ -75,7 +75,7 @@ export function PromptForm({
             min={3}
             max={10}
             value={slideCount}
-            onChange={(event) => setPrompt(event.target.value)}
+            onChange={(event) => setSlideCount(Number(event.target.value))}
             className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-spark focus:bg-white"
           />
         </label>
