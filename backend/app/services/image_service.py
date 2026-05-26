@@ -3,18 +3,16 @@ from pathlib import Path
 from typing import Any
 
 from app.schemas.presentation import Presentation, ResolvedImageAsset, SlideType
-from app.services.feature_flags import is_image_generation_enabled
 from app.services.gemini_service import (
     GeminiImageGenerationError,
     build_image_cache_key,
     generate_slide_image,
+    get_image_model_name,
 )
 from app.services.image_optimizer import ImageOptimizationError, optimize_image_bytes
 
 
 logger = logging.getLogger(__name__)
-GENERATED_IMAGES_DIR = Path(__file__).resolve().parents[2] / "generated" / "gemini_images"
-GENERATED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 
 async def _resolve_one_slide_image(slide: Any, style: str) -> None:
@@ -31,22 +29,21 @@ async def _resolve_one_slide_image(slide: Any, style: str) -> None:
         slide.resolved_image = ResolvedImageAsset(
             local_path=str(optimized.path.resolve()),
             public_url=f"/generated/optimized_images/{optimized.path.name}",
-            source="gemini-2.5-flash-image",
+            source=get_image_model_name(),
             source_url="",
             image_url=f"/generated/optimized_images/{optimized.path.name}",
             author=None,
             license_name="AI generated",
+            width=optimized.width,
+            height=optimized.height,
         )
         logger.info("Generated Gemini slide image. prompt=%s file=%s", image_prompt, optimized.path.name)
     except (GeminiImageGenerationError, ImageOptimizationError) as exc:
         logger.warning("Gemini image generation failed for prompt=%s error=%s", image_prompt, exc)
+        raise GeminiImageGenerationError(f"{image_prompt}: {exc}") from exc
 
 
 async def enrich_presentation_images(presentation: Presentation) -> Presentation:
-    if not is_image_generation_enabled():
-        logger.info("Global image generation switch is off. Skipping all Gemini image calls.")
-        return presentation
-
     image_slides = [
         slide
         for slide in presentation.slides
@@ -56,8 +53,22 @@ async def enrich_presentation_images(presentation: Presentation) -> Presentation
             SlideType.HERO_IMAGE,
         }
     ]
+    logger.info("Image enrichment starting. image_slide_count=%s model=%s", len(image_slides), get_image_model_name())
+
+    failures: list[str] = []
     for slide in image_slides:
-        await _resolve_one_slide_image(slide, presentation.theme)
+        try:
+            await _resolve_one_slide_image(slide, presentation.theme)
+        except GeminiImageGenerationError as exc:
+            failures.append(str(exc))
+
+    if failures:
+        raise GeminiImageGenerationError(
+            "Gemini image generation failed for "
+            f"{len(failures)} slide(s): " + " | ".join(failures[:3])
+        )
+
+    logger.info("Image enrichment complete. resolved_images=%s", sum(1 for slide in image_slides if slide.resolved_image))
     return presentation
 
 

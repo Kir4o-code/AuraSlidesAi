@@ -1,22 +1,16 @@
-<div class="slide__content comparison-layout">
-  <div class="comparison-layout__intro">
-    <div class="section-label">Comparison</div>
-    <h2 class="heading" style="font-size: {{ slide.heading_font_size }}px;">{{ slide.title }}</h2>
-    {% if slide.notes %}
-    <p class="caption" style="font-size: {{ slide.small_font_size }}px;">{{ slide.notes }}</p>
-    {% endif %}
-  </div>
-  <div class="comparison-layout__columns">
+<div class="slide__content">
+  <h2 class="heading" style="font-size: {{ slide.heading_font_size }}px;">{{ slide.title }}</h2>
+  <div class="comparison-layout">
     <article class="comparison-card">
-      <p class="comparison-card__label" style="font-size: {{ slide.card_font_size }}px;">{{ slide.left_title }}</p>
+      <p class="comparison-label" style="font-size: {{ slide.card_font_size }}px;">{{ slide.left_title }}</p>
       <ul class="bullet-list">
         {% for bullet in slide.left_bullets %}
         <li style="font-size: {{ slide.body_font_size }}px;">{{ bullet }}</li>
         {% endfor %}
       </ul>
     </article>
-    <article class="comparison-card comparison-card--accent">
-      <p class="comparison-card__label" style="font-size: {{ slide.card_font_size }}px;">{{ slide.right_title }}</p>
+    <article class="comparison-card">
+      <p class="comparison-label" style="font-size: {{ slide.card_font_size }}px;">{{ slide.right_title }}</p>
       <ul class="bullet-list">
         {% for bullet in slide.right_bullets %}
         <li style="font-size: {{ slide.body_font_size }}px;">{{ bullet }}</li>
@@ -24,4 +18,7 @@
       </ul>
     </article>
   </div>
+  {% if slide.notes %}
+  <p class="caption" style="font-size: {{ slide.small_font_size }}px;">{{ slide.notes }}</p>
+  {% endif %}
 </div>

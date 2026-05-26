@@ -8,9 +8,8 @@ venv/
 .env.example
 .DS_Store
 
-backend/generated/*.pdf
+backend/generated/**
 !backend/generated/.gitkeep
-backend/generated/image_research/
 
 frontend/.next/
 frontend/node_modules/

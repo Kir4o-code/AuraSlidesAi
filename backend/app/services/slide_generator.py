@@ -21,7 +21,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 DEBUG_DIR = OUTPUT_DIR / "debug"
 DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger(__name__)
-PDF_TEXT_SCALE = 1.3
+PDF_TEXT_SCALE = 1.0
 
 env = Environment(
     loader=FileSystemLoader(TEMPLATES_DIR),
@@ -57,7 +57,10 @@ def _slide_text_sizes(data: dict[str, Any]) -> dict[str, int]:
     title = str(data.get("title") or "")
     subtitle = str(data.get("subtitle") or "")
     bullets = data.get("bullets") or []
+    bullet_count = len(bullets)
     quote = str(data.get("quote") or "")
+    
+    # Calculate density based on character counts and bullet frequency
     detail_text = " ".join(
         [
             subtitle,
@@ -69,41 +72,52 @@ def _slide_text_sizes(data: dict[str, Any]) -> dict[str, int]:
         ]
     ).strip()
     total_length = len(detail_text)
+    
+    # density_scale: reduce size further if there are many bullets or characters
+    density_scale = 1.0
+    if bullet_count > 4:
+        density_scale *= 0.85
+    if total_length > 250:
+        density_scale *= 0.88
+    if total_length > 400:
+        density_scale *= 0.82
 
     if slide_type == "title_slide":
-        scale = _scale_for_length(len(title), [(120, 0.82), (85, 0.9), (60, 0.95)])
-        subtitle_scale = _scale_for_length(len(subtitle), [(140, 0.82), (90, 0.9)], 1.0)
+        scale = _scale_for_length(len(title), [(100, 0.65), (70, 0.75), (45, 0.88), (30, 0.95)])
+        subtitle_scale = _scale_for_length(len(subtitle), [(140, 0.75), (90, 0.85), (60, 0.92)], 1.0)
         return {
-            "title_font_size": _scaled_font_size(40 * scale),
-            "subtitle_font_size": _scaled_font_size(18 * subtitle_scale),
+            "title_font_size": _scaled_font_size(64 * scale),
+            "subtitle_font_size": _scaled_font_size(24 * subtitle_scale),
+            "small_font_size": _scaled_font_size(16 * density_scale),
         }
 
     if slide_type in {"title_bullets", "title_bullets_image", "comparison", "hero_image", "timeline", "statistics"}:
-        scale = _scale_for_length(len(title), [(120, 0.82), (85, 0.9), (60, 0.95)])
-        body_scale = _scale_for_length(total_length, [(260, 0.85), (180, 0.92)], 1.0)
+        scale = _scale_for_length(len(title), [(90, 0.70), (60, 0.80), (40, 0.90)])
+        body_scale = _scale_for_length(total_length, [(400, 0.72), (250, 0.82), (150, 0.90)], 1.0) * density_scale
+        
         heading_size = {
-            "title_bullets": 28,
-            "title_bullets_image": 26,
-            "hero_image": 32,
-            "comparison": 26,
-            "timeline": 26,
-            "statistics": 26,
-        }.get(slide_type, 26)
+            "title_bullets": 42,
+            "title_bullets_image": 36,
+            "hero_image": 44,
+            "comparison": 34,
+            "timeline": 34,
+            "statistics": 34,
+        }.get(slide_type, 34)
+        
         return {
             "heading_font_size": _scaled_font_size(heading_size * scale),
-            "body_font_size": _scaled_font_size(16 * body_scale),
-            "small_font_size": _scaled_font_size(12 * body_scale),
-            "card_font_size": _scaled_font_size(13 * body_scale),
-            "value_font_size": _scaled_font_size(26 * body_scale),
+            "body_font_size": _scaled_font_size(24 * body_scale),
+            "small_font_size": _scaled_font_size(16 * body_scale),
+            "card_font_size": _scaled_font_size(18 * body_scale),
+            "value_font_size": _scaled_font_size(52 * body_scale),
         }
 
     if slide_type == "quote":
-        scale = _scale_for_length(len(quote), [(220, 0.72), (160, 0.82), (110, 0.9)], 1.0)
-        attribution_scale = _scale_for_length(len(str(data.get("attribution") or "")), [(80, 0.9)], 1.0)
+        scale = _scale_for_length(len(quote), [(250, 0.75), (180, 0.85), (120, 0.92)], 1.0)
         return {
-            "quote_font_size": _scaled_font_size(28 * scale),
-            "attribution_font_size": _scaled_font_size(13 * attribution_scale),
-            "body_font_size": _scaled_font_size(16 * scale),
+            "quote_font_size": _scaled_font_size(46 * scale),
+            "attribution_font_size": _scaled_font_size(24 * scale),
+            "body_font_size": _scaled_font_size(22 * scale),
         }
 
     return {}

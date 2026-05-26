@@ -118,7 +118,6 @@ class GeneratePresentationRequest(BaseModel):
     prompt: str = Field(min_length=5, max_length=4000)
     slide_count: int = Field(default=5, ge=3, le=10)
     style: str = Field(default="modern", min_length=1, max_length=40)
-    generate_images: bool = True
 
 
 class GeneratePresentationResponse(BaseModel):

@@ -1,12 +1,11 @@
-<div class="slide__content quote-layout">
-  <div class="section-label">Quote</div>
+<div class="slide__content slide__content--center">
   <blockquote class="quote-block">
-    <p class="quote-block__text" style="font-size: {{ slide.quote_font_size }}px;">{{ slide.quote }}</p>
+    <p class="quote-text" style="font-size: {{ slide.quote_font_size }}px;">{{ slide.quote }}</p>
     {% if slide.attribution %}
-    <footer class="quote-block__attribution" style="font-size: {{ slide.attribution_font_size }}px;">{{ slide.attribution }}</footer>
+    <footer class="quote-attribution" style="font-size: {{ slide.subtitle_font_size }}px;">— {{ slide.attribution }}</footer>
     {% endif %}
   </blockquote>
   {% if slide.notes %}
-  <p class="caption" style="font-size: {{ slide.body_font_size }}px;">{{ slide.notes }}</p>
+  <p class="caption" style="font-size: {{ slide.small_font_size }}px; margin-top: 40px;">{{ slide.notes }}</p>
   {% endif %}
 </div>

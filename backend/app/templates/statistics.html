@@ -1,13 +1,12 @@
 <div class="slide__content">
-  <div class="section-label">Statistics</div>
   <h2 class="heading" style="font-size: {{ slide.heading_font_size }}px;">{{ slide.title }}</h2>
   <div class="stats-grid">
     {% for stat in slide.statistics %}
     <article class="stat-card">
-      <p class="stat-card__value" style="font-size: {{ slide.value_font_size }}px;">{{ stat.value }}</p>
-      <p class="stat-card__label" style="font-size: {{ slide.card_font_size }}px;">{{ stat.label }}</p>
+      <p class="stat-value" style="font-size: {{ slide.value_font_size }}px;">{{ stat.value }}</p>
+      <p class="stat-label" style="font-size: {{ slide.card_font_size }}px;">{{ stat.label }}</p>
       {% if stat.detail %}
-      <p class="stat-card__detail" style="font-size: {{ slide.small_font_size }}px;">{{ stat.detail }}</p>
+      <p style="font-size: {{ slide.small_font_size }}px;">{{ stat.detail }}</p>
       {% endif %}
     </article>
     {% endfor %}

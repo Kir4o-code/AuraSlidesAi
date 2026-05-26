@@ -168,8 +168,8 @@ def _add_image_in_box(slide, path: Path, left: float, top: float, width: float, 
 
 
 def _add_bullet_lines(slide, bullets: list[str], tokens: ThemeTokens, left: float, top: float, width: float) -> None:
-    line_height = _scaled_space(tokens, 0.62 if len(bullets) <= 3 else 0.56)
-    gap = _scaled_space(tokens, 0.18)
+    line_height = _scaled_space(tokens, 0.72)
+    gap = _scaled_space(tokens, 0.28)
     for index, bullet in enumerate(bullets):
         row_top = top + index * (line_height + gap)
         _add_textbox(
@@ -181,24 +181,23 @@ def _add_bullet_lines(slide, bullets: list[str], tokens: ThemeTokens, left: floa
             f"• {bullet}",
             tokens=tokens,
             font_name=_body_font(tokens),
-            font_size=_scaled_font(tokens, 17),
+            font_size=_scaled_font(tokens, 20),
             color=tokens.text_color,
         )
-
 
 def create_title_slide(prs: PptxPresentation, slide: Slide, tokens: ThemeTokens):
     page = _blank_slide(prs)
     _apply_base(page, tokens)
-    title_size = _scaled_font(tokens, _fit_font_size(38, slide.title or "", 24, 40))
+    title_size = _scaled_font(tokens, _fit_font_size(44, slide.title or "", 28, 52))
     _add_textbox(
         page,
         1.5,
-        1.85,
-        10.33,
         2.2,
+        10.33,
+        2.5,
         slide.title or "",
         font_name=_heading_font(tokens),
-        font_size=title_size + 4,
+        font_size=title_size,
         color=tokens.text_color,
         bold=True,
         align=PP_ALIGN.CENTER,
@@ -206,176 +205,109 @@ def create_title_slide(prs: PptxPresentation, slide: Slide, tokens: ThemeTokens)
     if slide.subtitle:
         _add_textbox(
             page,
-            1.3,
-            3.2,
-            10.65,
-            0.78,
+            1.5,
+            4.8,
+            10.33,
+            1.0,
             slide.subtitle,
             font_name=_body_font(tokens),
-            font_size=_scaled_font(tokens, 21),
+            font_size=_scaled_font(tokens, 22),
             color=tokens.muted_text_color,
             align=PP_ALIGN.CENTER,
         )
-    if slide.notes:
-        _add_textbox(
-            page,
-            1.5,
-            4.2,
-            10.25,
-            0.6,
-            slide.notes,
-            font_name=_body_font(tokens),
-            font_size=_scaled_font(tokens, 13),
-            color=tokens.muted_text_color,
-            align=PP_ALIGN.CENTER,
-        )
-
 
 def create_bullets_slide(prs: PptxPresentation, slide: Slide, tokens: ThemeTokens):
     page = _blank_slide(prs)
     _apply_base(page, tokens)
-    heading_size = _scaled_font(tokens, _fit_font_size(30, slide.title or "", 22, 34))
+    heading_size = _scaled_font(tokens, _fit_font_size(32, slide.title or "", 24, 38))
     _add_textbox(
         page,
         1.2,
-        1.0,
+        0.8,
         10.9,
-        1.0,
+        1.2,
         slide.title or "",
         font_name=_heading_font(tokens),
-        font_size=heading_size + 2,
+        font_size=heading_size,
         color=tokens.text_color,
         bold=True,
     )
-    _add_bullet_lines(page, slide.bullets, tokens, 1.4, 2.6, 10.5)
-    if slide.notes:
-        _add_textbox(page, 1.2, 6.4, 10.8, 0.42, slide.notes, font_name=_body_font(tokens), font_size=_scaled_font(tokens, 11), color=tokens.muted_text_color)
-
+    _add_bullet_lines(page, slide.bullets, tokens, 1.2, 2.2, 10.9)
 
 def create_image_focus_slide(prs: PptxPresentation, slide: Slide, tokens: ThemeTokens):
     page = _blank_slide(prs)
     _apply_base(page, tokens)
-    heading_size = _scaled_font(tokens, _fit_font_size(28, slide.title or "", 22, 32))
-    _add_textbox(page, 1.2, 1.0, 5.8, 0.98, slide.title or "", font_name=_heading_font(tokens), font_size=heading_size + 2, color=tokens.text_color, bold=True)
-    _add_bullet_lines(page, slide.bullets, tokens, 1.3, 2.45, 5.3)
-    if slide.notes:
-        _add_textbox(page, 1.2, 6.4, 5.7, 0.44, slide.notes, font_name=_body_font(tokens), font_size=_scaled_font(tokens, 11), color=tokens.muted_text_color)
+    heading_size = _scaled_font(tokens, _fit_font_size(30, slide.title or "", 22, 36))
+    _add_textbox(page, 1.2, 0.8, 6.2, 1.2, slide.title or "", font_name=_heading_font(tokens), font_size=heading_size, color=tokens.text_color, bold=True)
+    _add_bullet_lines(page, slide.bullets, tokens, 1.2, 2.2, 6.0)
 
     image_path = _image_path(slide)
     if image_path and image_path.exists():
-        _add_image_in_box(page, image_path, 7.1, 1.2, 5.0, 5.2)
+        _add_image_in_box(page, image_path, 7.8, 1.2, 4.8, 5.2)
     else:
-        _add_textbox(
-            page,
-            7.1,
-            2.75,
-            5.0,
-            0.8,
-            slide.image_prompt or "Image will be generated from the prompt",
-            font_name=_body_font(tokens),
-            font_size=_scaled_font(tokens, 18),
-            color=tokens.text_color,
-            bold=True,
-            align=PP_ALIGN.CENTER,
-        )
-
+        _add_textbox(page, 7.8, 2.8, 4.8, 0.8, slide.image_prompt or "AI Visual", font_name=_body_font(tokens), font_size=_scaled_font(tokens, 18), color=tokens.text_color, bold=True, align=PP_ALIGN.CENTER)
 
 def create_hero_image_slide(prs: PptxPresentation, slide: Slide, tokens: ThemeTokens):
     page = _blank_slide(prs)
     _apply_base(page, tokens)
-    title_size = _scaled_font(tokens, _fit_font_size(34, slide.title or "", 22, 38))
-    _add_textbox(page, 1.2, 1.2, 5.9, 1.34, slide.title or "", font_name=_heading_font(tokens), font_size=title_size + 2, color=tokens.text_color, bold=True)
+    title_size = _scaled_font(tokens, _fit_font_size(36, slide.title or "", 24, 42))
+    _add_textbox(page, 1.2, 1.8, 5.8, 1.8, slide.title or "", font_name=_heading_font(tokens), font_size=title_size, color=tokens.text_color, bold=True)
     if slide.subtitle:
-        _add_textbox(page, 1.2, 2.8, 5.7, 0.58, slide.subtitle, font_name=_body_font(tokens), font_size=_scaled_font(tokens, 14), color=tokens.muted_text_color)
-    if slide.notes:
-        _add_textbox(page, 1.2, 3.6, 5.7, 0.78, slide.notes, font_name=_body_font(tokens), font_size=_scaled_font(tokens, 11), color=tokens.muted_text_color)
+        _add_textbox(page, 1.2, 3.8, 5.8, 0.8, slide.subtitle, font_name=_body_font(tokens), font_size=_scaled_font(tokens, 18), color=tokens.muted_text_color)
 
     image_path = _image_path(slide)
     if image_path and image_path.exists():
-        _add_image_in_box(page, image_path, 7.5, 1.2, 5.2, 5.5)
-    else:
-        _add_textbox(
-            page,
-            7.5,
-            2.7,
-            5.2,
-            0.8,
-            slide.image_prompt or "Image will be generated from the prompt",
-            font_name=_body_font(tokens),
-            font_size=_scaled_font(tokens, 18),
-            color=tokens.text_color,
-            bold=True,
-            align=PP_ALIGN.CENTER,
-        )
-
+        _add_image_in_box(page, image_path, 7.4, 1.0, 5.2, 5.5)
 
 def create_comparison_slide(prs: PptxPresentation, slide: Slide, tokens: ThemeTokens):
     page = _blank_slide(prs)
     _apply_base(page, tokens)
-    heading_size = _scaled_font(tokens, _fit_font_size(28, slide.title or "", 22, 32))
-    _add_textbox(page, 1.2, 1.0, 10.9, 0.96, slide.title or "", font_name=_heading_font(tokens), font_size=heading_size + 2, color=tokens.text_color, bold=True)
-    if slide.notes:
-        _add_textbox(page, 1.2, 2.0, 10.9, 0.46, slide.notes, font_name=_body_font(tokens), font_size=_scaled_font(tokens, 11), color=tokens.muted_text_color)
-
-    _add_textbox(page, 1.2, 2.7, 5.4, 0.32, slide.left_title or "Option A", font_name=_heading_font(tokens), font_size=_scaled_font(tokens, 14), color=tokens.accent_color, bold=True)
-    _add_textbox(page, 7.2, 2.7, 5.4, 0.32, slide.right_title or "Option B", font_name=_heading_font(tokens), font_size=_scaled_font(tokens, 14), color=tokens.accent_color, bold=True)
-    _add_bullet_lines(page, slide.left_bullets, tokens, 1.2, 3.2, 5.0)
-    _add_bullet_lines(page, slide.right_bullets, tokens, 7.2, 3.2, 5.0)
-
+    heading_size = _scaled_font(tokens, _fit_font_size(30, slide.title or "", 22, 36))
+    _add_textbox(page, 1.2, 0.8, 10.9, 1.0, slide.title or "", font_name=_heading_font(tokens), font_size=heading_size, color=tokens.text_color, bold=True)
+    
+    _add_textbox(page, 1.2, 2.0, 5.3, 0.4, slide.left_title or "A", font_name=_heading_font(tokens), font_size=_scaled_font(tokens, 16), color=tokens.accent_color, bold=True)
+    _add_textbox(page, 6.8, 2.0, 5.3, 0.4, slide.right_title or "B", font_name=_heading_font(tokens), font_size=_scaled_font(tokens, 16), color=tokens.accent_color, bold=True)
+    
+    _add_bullet_lines(page, slide.left_bullets, tokens, 1.2, 2.6, 5.3)
+    _add_bullet_lines(page, slide.right_bullets, tokens, 6.8, 2.6, 5.3)
 
 def create_timeline_slide(prs: PptxPresentation, slide: Slide, tokens: ThemeTokens):
     page = _blank_slide(prs)
     _apply_base(page, tokens)
-    heading_size = _scaled_font(tokens, _fit_font_size(28, slide.title or "", 22, 32))
-    _add_textbox(page, 1.2, 1.0, 10.9, 0.85, slide.title or "", font_name=_heading_font(tokens), font_size=heading_size + 2, color=tokens.text_color, bold=True)
+    heading_size = _scaled_font(tokens, _fit_font_size(30, slide.title or "", 22, 36))
+    _add_textbox(page, 1.2, 0.8, 10.9, 1.0, slide.title or "", font_name=_heading_font(tokens), font_size=heading_size, color=tokens.text_color, bold=True)
 
-    top = 2.4
+    top = 2.2
     for index, step in enumerate(slide.timeline):
-        row_top = top + index * _scaled_space(tokens, 1.15)
-        marker = page.shapes.add_shape(MSO_SHAPE.OVAL, Inches(1.2), Inches(row_top + 0.12), Inches(0.16), Inches(0.16))
-        marker.fill.solid()
-        marker.fill.fore_color.rgb = _rgb(tokens.accent_color)
-        marker.line.fill.background()
-        _add_textbox(page, 1.5, row_top + 0.01, 2.15, 0.38, step.label, font_name=_heading_font(tokens), font_size=_scaled_font(tokens, 14), color=tokens.accent_color, bold=True)
+        row_top = top + index * _scaled_space(tokens, 1.2)
+        _add_textbox(page, 1.5, row_top + 0.1, 2.2, 0.4, step.label, font_name=_heading_font(tokens), font_size=_scaled_font(tokens, 16), color=tokens.accent_color, bold=True)
         if step.detail:
-            _add_textbox(page, 3.8, row_top - 0.01, 8.1, 0.5, step.detail, font_name=_body_font(tokens), font_size=_scaled_font(tokens, 13), color=tokens.text_color)
-
+            _add_textbox(page, 3.8, row_top + 0.1, 8.0, 0.4, step.detail, font_name=_body_font(tokens), font_size=_scaled_font(tokens, 14), color=tokens.text_color)
 
 def create_statistics_slide(prs: PptxPresentation, slide: Slide, tokens: ThemeTokens):
     page = _blank_slide(prs)
     _apply_base(page, tokens)
-    heading_size = _scaled_font(tokens, _fit_font_size(28, slide.title or "", 22, 32))
-    _add_textbox(page, 1.2, 1.0, 10.9, 0.85, slide.title or "", font_name=_heading_font(tokens), font_size=heading_size + 2, color=tokens.text_color, bold=True)
+    heading_size = _scaled_font(tokens, _fit_font_size(30, slide.title or "", 22, 36))
+    _add_textbox(page, 1.2, 0.8, 10.9, 1.0, slide.title or "", font_name=_heading_font(tokens), font_size=heading_size, color=tokens.text_color, bold=True)
 
-    columns = 3 if len(slide.statistics) >= 3 else 2
-    x_positions = [1.2, 5.2, 9.2] if columns == 3 else [1.2, 7.3]
-    y_positions = [2.4, 4.5]
-    card_width = 3.55 if columns == 3 else 5.0
-    for index, stat in enumerate(slide.statistics[:6]):
-        col = index % columns
-        row = index // columns
-        left = x_positions[col]
-        top = y_positions[row]
-        value_size = _scaled_font(tokens, _fit_font_size(30, stat.value, 24, 34))
-        _add_textbox(page, left, top, card_width, 0.62, stat.value, font_name=_heading_font(tokens), font_size=value_size + 4, color=tokens.accent_color, bold=True)
-        _add_textbox(page, left, top + 0.72, card_width, 0.32, stat.label, font_name=_heading_font(tokens), font_size=_scaled_font(tokens, 14), color=tokens.text_color, bold=True)
-        if stat.detail:
-            _add_textbox(page, left, top + 1.08, card_width, 0.4, stat.detail, font_name=_body_font(tokens), font_size=_scaled_font(tokens, 11), color=tokens.muted_text_color)
-
-    if slide.notes:
-        _add_textbox(page, 1.2, 6.48, 11.0, 0.34, slide.notes, font_name=_body_font(tokens), font_size=_scaled_font(tokens, 11), color=tokens.muted_text_color)
-
+    cols = min(3, len(slide.statistics))
+    rows = (len(slide.statistics) + cols - 1) // cols
+    width = 10.9 / cols - 0.2
+    for i, stat in enumerate(slide.statistics):
+        c, r = i % cols, i // cols
+        left, top = 1.2 + c * (width + 0.3), 2.2 + r * 2.2
+        _add_textbox(page, left + 0.2, top + 0.2, width - 0.4, 0.6, stat.value, font_name=_heading_font(tokens), font_size=_scaled_font(tokens, 32), color=tokens.accent_color, bold=True, align=PP_ALIGN.CENTER)
+        _add_textbox(page, left + 0.2, top + 0.8, width - 0.4, 0.4, stat.label, font_name=_heading_font(tokens), font_size=_scaled_font(tokens, 14), color=tokens.text_color, bold=True, align=PP_ALIGN.CENTER)
+        if hasattr(stat, 'detail') and stat.detail:
+             _add_textbox(page, left + 0.2, top + 1.2, width - 0.4, 0.4, stat.detail, font_name=_body_font(tokens), font_size=_scaled_font(tokens, 12), color=tokens.muted_text_color, align=PP_ALIGN.CENTER)
 
 def create_quote_slide(prs: PptxPresentation, slide: Slide, tokens: ThemeTokens):
     page = _blank_slide(prs)
     _apply_base(page, tokens)
-    quote_size = _scaled_font(tokens, _fit_font_size(30, slide.quote or "", 24, 34))
-    _add_textbox(page, 1.5, 2.0, 10.3, 2.78, slide.quote or "", font_name=_heading_font(tokens), font_size=quote_size + 4, color=tokens.text_color, bold=True, align=PP_ALIGN.CENTER)
+    quote_size = _scaled_font(tokens, _fit_font_size(34, slide.quote or "", 24, 46))
+    _add_textbox(page, 1.5, 2.5, 10.3, 3.0, slide.quote or "", font_name=_heading_font(tokens), font_size=quote_size, color=tokens.text_color, bold=True, align=PP_ALIGN.CENTER)
     if slide.attribution:
-        _add_textbox(page, 2.0, 4.82, 9.4, 0.44, slide.attribution, font_name=_body_font(tokens), font_size=_scaled_font(tokens, 14), color=tokens.muted_text_color, align=PP_ALIGN.CENTER)
-    if slide.notes:
-        _add_textbox(page, 2.1, 5.38, 9.2, 0.7, slide.notes, font_name=_body_font(tokens), font_size=_scaled_font(tokens, 11), color=tokens.muted_text_color, align=PP_ALIGN.CENTER)
-
+        _add_textbox(page, 1.5, 5.5, 10.3, 0.6, f"— {slide.attribution}", font_name=_body_font(tokens), font_size=_scaled_font(tokens, 20), color=tokens.muted_text_color, align=PP_ALIGN.CENTER)
 
 SLIDE_RENDERERS: dict[SlideType, Callable[[PptxPresentation, Slide, ThemeTokens], None]] = {
     SlideType.TITLE_SLIDE: create_title_slide,
@@ -388,7 +320,6 @@ SLIDE_RENDERERS: dict[SlideType, Callable[[PptxPresentation, Slide, ThemeTokens]
     SlideType.QUOTE: create_quote_slide,
 }
 
-
 def build_pptx_presentation(presentation: Presentation) -> PptxPresentation:
     pptx = PptxPresentation()
     pptx.slide_width = SLIDE_WIDTH
@@ -397,8 +328,7 @@ def build_pptx_presentation(presentation: Presentation) -> PptxPresentation:
 
     for slide in presentation.slides:
         renderer = SLIDE_RENDERERS.get(slide.type)
-        if renderer is None:
-            continue
-        renderer(pptx, slide, tokens)
+        if renderer is not None:
+            renderer(pptx, slide, tokens)
 
     return pptx
