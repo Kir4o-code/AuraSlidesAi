@@ -82,7 +82,7 @@ export function PromptForm({
 
         <label className="block">
           <span className="mb-2 block text-sm font-medium text-slate-700">
-            Style
+            Theme hint
           </span>
           <select
             value={style}

@@ -1,5 +1,7 @@
-import type { ProgressState } from "@/lib/api";
-import type { GeneratePresentationResponse } from "@/lib/api";
+import type { GeneratePresentationResponse, ProgressState } from "@/lib/api";
+
+import { SlideDeck } from "@/components/presentation/SlideDeck";
+import { resolveThemeTokens } from "@/lib/theme";
 
 
 interface PresentationPreviewProps {
@@ -99,18 +101,18 @@ export function PresentationPreview({
       <div className="mt-5 grid gap-4 md:grid-cols-3">
         <div className="rounded-2xl bg-slate-50 p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
-            Theme Style
+            Theme
           </p>
           <p className="mt-2 text-sm font-medium text-ink">
-            {result.presentation.theme.style}
+            {result.presentation.theme}
           </p>
         </div>
         <div className="rounded-2xl bg-slate-50 p-4">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
-            Primary Color
+            Background
           </p>
           <p className="mt-2 text-sm font-medium text-ink">
-            {result.presentation.theme.primary_color}
+            {resolveThemeTokens(result.presentation.theme).background}
           </p>
         </div>
         <div className="rounded-2xl bg-slate-50 p-4">
@@ -118,14 +120,14 @@ export function PresentationPreview({
             Font
           </p>
           <p className="mt-2 text-sm font-medium text-ink">
-            {result.presentation.theme.font}
+            {resolveThemeTokens(result.presentation.theme).fontFamily}
           </p>
         </div>
       </div>
 
-      <pre className="mt-5 overflow-x-auto rounded-3xl bg-slate-950 p-5 text-xs leading-6 text-slate-100">
-        {JSON.stringify(result.presentation, null, 2)}
-      </pre>
+      <div className="mt-6 rounded-[30px] border border-slate-200 bg-slate-50 p-4">
+        <SlideDeck presentation={result.presentation} />
+      </div>
     </div>
   );
 }

@@ -1,0 +1,12 @@
+<div class="slide__content">
+  <div class="section-label">Key Points</div>
+  <h2 class="heading" style="font-size: {{ slide.heading_font_size }}px;">{{ slide.title }}</h2>
+  <ul class="bullet-list">
+    {% for bullet in slide.bullets %}
+    <li style="font-size: {{ slide.body_font_size }}px;">{{ bullet }}</li>
+    {% endfor %}
+  </ul>
+  {% if slide.notes %}
+  <p class="caption" style="font-size: {{ slide.small_font_size }}px;">{{ slide.notes }}</p>
+  {% endif %}
+</div>

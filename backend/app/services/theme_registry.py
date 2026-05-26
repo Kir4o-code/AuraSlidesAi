@@ -1,0 +1,127 @@
+from dataclasses import dataclass
+
+from app.schemas.presentation import ThemeName
+
+
+@dataclass(frozen=True)
+class ThemeTokens:
+    name: str
+    background: str
+    background_alt: str
+    surface: str
+    text_color: str
+    muted_text_color: str
+    accent_color: str
+    accent_soft_color: str
+    border_color: str
+    font_family: str
+    border_radius: str
+    shadow: str
+    spacing_scale: float
+    typography_scale: float
+
+
+THEME_REGISTRY: dict[str, ThemeTokens] = {
+    ThemeName.MODERN_DARK.value: ThemeTokens(
+        name=ThemeName.MODERN_DARK.value,
+        background="#0f172a",
+        background_alt="#111827",
+        surface="#111c34",
+        text_color="#f8fafc",
+        muted_text_color="#cbd5e1",
+        accent_color="#8b5cf6",
+        accent_soft_color="#c4b5fd",
+        border_color="rgba(148, 163, 184, 0.22)",
+        font_family="Inter",
+        border_radius="28px",
+        shadow="0 28px 80px rgba(15, 23, 42, 0.35)",
+        spacing_scale=1.0,
+        typography_scale=1.0,
+    ),
+    ThemeName.MODERN_LIGHT.value: ThemeTokens(
+        name=ThemeName.MODERN_LIGHT.value,
+        background="#f8fafc",
+        background_alt="#eef2ff",
+        surface="#ffffff",
+        text_color="#0f172a",
+        muted_text_color="#475569",
+        accent_color="#2563eb",
+        accent_soft_color="#dbeafe",
+        border_color="#cbd5e1",
+        font_family="Inter",
+        border_radius="28px",
+        shadow="0 24px 70px rgba(37, 99, 235, 0.12)",
+        spacing_scale=1.0,
+        typography_scale=1.0,
+    ),
+    ThemeName.EDITORIAL.value: ThemeTokens(
+        name=ThemeName.EDITORIAL.value,
+        background="#fffaf3",
+        background_alt="#fef3c7",
+        surface="#ffffff",
+        text_color="#111827",
+        muted_text_color="#57534e",
+        accent_color="#d97706",
+        accent_soft_color="#fde68a",
+        border_color="#e7e5e4",
+        font_family="Merriweather",
+        border_radius="24px",
+        shadow="0 26px 72px rgba(120, 53, 15, 0.12)",
+        spacing_scale=1.05,
+        typography_scale=1.04,
+    ),
+    ThemeName.CORPORATE.value: ThemeTokens(
+        name=ThemeName.CORPORATE.value,
+        background="#f1f5f9",
+        background_alt="#e2e8f0",
+        surface="#ffffff",
+        text_color="#0f172a",
+        muted_text_color="#334155",
+        accent_color="#1d4ed8",
+        accent_soft_color="#bfdbfe",
+        border_color="#cbd5e1",
+        font_family="Inter",
+        border_radius="18px",
+        shadow="0 18px 42px rgba(15, 23, 42, 0.12)",
+        spacing_scale=0.95,
+        typography_scale=0.98,
+    ),
+    ThemeName.PLAYFUL.value: ThemeTokens(
+        name=ThemeName.PLAYFUL.value,
+        background="#fff7fb",
+        background_alt="#fdf2f8",
+        surface="#ffffff",
+        text_color="#1f2937",
+        muted_text_color="#6b7280",
+        accent_color="#db2777",
+        accent_soft_color="#fbcfe8",
+        border_color="#f3c4dd",
+        font_family="Inter",
+        border_radius="30px",
+        shadow="0 26px 72px rgba(219, 39, 119, 0.16)",
+        spacing_scale=1.08,
+        typography_scale=1.02,
+    ),
+}
+
+THEME_ALIASES = {
+    "modern": ThemeName.MODERN_DARK.value,
+    "minimal": ThemeName.MODERN_LIGHT.value,
+    "corporate": ThemeName.CORPORATE.value,
+    "playful": ThemeName.PLAYFUL.value,
+}
+
+
+def resolve_theme_name(value: str | None) -> str:
+    if not value:
+        return ThemeName.MODERN_DARK.value
+
+    normalized = value.strip().lower()
+    normalized = THEME_ALIASES.get(normalized, normalized)
+    if normalized in THEME_REGISTRY:
+        return normalized
+    return ThemeName.MODERN_DARK.value
+
+
+def get_theme_tokens(value: str | None) -> ThemeTokens:
+    return THEME_REGISTRY[resolve_theme_name(value)]

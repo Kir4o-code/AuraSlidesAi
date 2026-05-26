@@ -1,0 +1,20 @@
+<div class="slide__content image-focus-layout">
+  <div>
+    <div class="section-label">Hero Image</div>
+    <h2 class="heading" style="font-size: {{ slide.heading_font_size }}px;">{{ slide.title }}</h2>
+    {% if slide.subtitle %}
+    <p class="caption" style="font-size: {{ slide.body_font_size }}px;">{{ slide.subtitle }}</p>
+    {% endif %}
+    {% if slide.notes %}
+    <p class="caption" style="font-size: {{ slide.small_font_size }}px;">{{ slide.notes }}</p>
+    {% endif %}
+  </div>
+  <div class="hero-image-placeholder">
+    {% if slide.image_asset and slide.image_asset.render_src %}
+    <img class="resolved-image resolved-image--hero" src="{{ slide.image_asset.render_src }}" alt="{{ slide.image_asset.alt }}" />
+    {% else %}
+    <div class="hero-image-placeholder__role">hero image</div>
+    <div class="hero-image-placeholder__query">{{ slide.image_prompt }}</div>
+    {% endif %}
+  </div>
+</div>

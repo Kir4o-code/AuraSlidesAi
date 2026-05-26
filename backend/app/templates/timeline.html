@@ -1,0 +1,17 @@
+<div class="slide__content">
+  <div class="section-label">Timeline</div>
+  <h2 class="heading" style="font-size: {{ slide.heading_font_size }}px;">{{ slide.title }}</h2>
+  <div class="timeline-list">
+    {% for step in slide.timeline %}
+    <div class="timeline-item">
+      <div class="timeline-item__marker"></div>
+      <div>
+        <h3 class="timeline-item__title" style="font-size: {{ slide.card_font_size }}px;">{{ step.label }}</h3>
+        {% if step.detail %}
+        <p class="timeline-item__detail" style="font-size: {{ slide.small_font_size }}px;">{{ step.detail }}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>

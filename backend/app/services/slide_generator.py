@@ -9,6 +9,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from app.schemas.presentation import Presentation
 from app.services.image_service import build_image_context
 from app.services.pdf_exporter import export_pdf
+from app.services.theme_registry import get_theme_tokens
 
 
 APP_DIR = Path(__file__).resolve().parent.parent
@@ -19,6 +20,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 DEBUG_DIR = OUTPUT_DIR / "debug"
 DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger(__name__)
+PDF_TEXT_SCALE = 1.08
 
 env = Environment(
     loader=FileSystemLoader(TEMPLATES_DIR),
@@ -33,71 +35,96 @@ def _hex_to_rgb(value: str) -> tuple[int, int, int]:
     if len(cleaned) != 6:
         return (37, 99, 235)
     try:
-        return tuple(int(cleaned[index:index + 2], 16) for index in (0, 2, 4))
+        return tuple(int(cleaned[index : index + 2], 16) for index in (0, 2, 4))
     except ValueError:
         return (37, 99, 235)
 
 
-def _rgb_to_hex(rgb: tuple[int, int, int]) -> str:
-    return "#" + "".join(f"{max(0, min(channel, 255)):02x}" for channel in rgb)
+def _scale_for_length(length: int, thresholds: list[tuple[int, float]], default: float = 1.0) -> float:
+    for threshold, scale in thresholds:
+        if length >= threshold:
+            return scale
+    return default
 
 
-def _mix(color_a: tuple[int, int, int], color_b: tuple[int, int, int], weight: float) -> tuple[int, int, int]:
-    return tuple(
-        round(color_a[index] * (1 - weight) + color_b[index] * weight)
-        for index in range(3)
-    )
+def _scaled_font_size(value: float) -> int:
+    return max(1, round(value * PDF_TEXT_SCALE))
+
+
+def _slide_text_sizes(data: dict[str, Any]) -> dict[str, int]:
+    slide_type = data.get("type")
+    title = str(data.get("title") or "")
+    subtitle = str(data.get("subtitle") or "")
+    bullets = data.get("bullets") or []
+    quote = str(data.get("quote") or "")
+    detail_text = " ".join(
+        [
+            subtitle,
+            str(data.get("notes") or ""),
+            quote,
+            " ".join(bullets),
+            " ".join(data.get("left_bullets") or []),
+            " ".join(data.get("right_bullets") or []),
+        ]
+    ).strip()
+    total_length = len(detail_text)
+
+    if slide_type == "title_slide":
+        scale = _scale_for_length(len(title), [(120, 0.82), (85, 0.9), (60, 0.95)])
+        subtitle_scale = _scale_for_length(len(subtitle), [(140, 0.82), (90, 0.9)], 1.0)
+        return {
+            "title_font_size": _scaled_font_size(46 * scale),
+            "subtitle_font_size": _scaled_font_size(20 * subtitle_scale),
+        }
+
+    if slide_type in {"title_bullets", "title_bullets_image", "comparison", "hero_image", "timeline", "statistics"}:
+        scale = _scale_for_length(len(title), [(120, 0.82), (85, 0.9), (60, 0.95)])
+        body_scale = _scale_for_length(total_length, [(260, 0.85), (180, 0.92)], 1.0)
+        heading_size = {
+            "title_bullets": 34,
+            "title_bullets_image": 32,
+            "hero_image": 38,
+            "comparison": 32,
+            "timeline": 32,
+            "statistics": 32,
+        }.get(slide_type, 32)
+        return {
+            "heading_font_size": _scaled_font_size(heading_size * scale),
+            "body_font_size": _scaled_font_size(18 * body_scale),
+            "small_font_size": _scaled_font_size(13 * body_scale),
+            "card_font_size": _scaled_font_size(14 * body_scale),
+            "value_font_size": _scaled_font_size(30 * body_scale),
+        }
+
+    if slide_type == "quote":
+        scale = _scale_for_length(len(quote), [(220, 0.72), (160, 0.82), (110, 0.9)], 1.0)
+        attribution_scale = _scale_for_length(len(str(data.get("attribution") or "")), [(80, 0.9)], 1.0)
+        return {
+            "quote_font_size": _scaled_font_size(28 * scale),
+            "attribution_font_size": _scaled_font_size(13 * attribution_scale),
+            "body_font_size": _scaled_font_size(16 * scale),
+        }
+
+    return {}
 
 
 def build_theme_tokens(presentation: Presentation) -> dict[str, str]:
-    primary = _hex_to_rgb(presentation.theme.primary_color)
-    white = (255, 255, 255)
-    dark = (15, 23, 42)
-    teal = (13, 148, 136)
-    coral = (244, 114, 182)
-    style = presentation.theme.style.lower()
-
-    accent = primary
-    if style == "playful":
-        accent = _mix(primary, coral, 0.35)
-        bg_start = _mix(primary, white, 0.88)
-        bg_end = _mix(coral, white, 0.9)
-        panel = _mix(primary, white, 0.93)
-    elif style == "corporate":
-        accent = _mix(primary, dark, 0.25)
-        bg_start = _mix(primary, white, 0.95)
-        bg_end = _mix(dark, white, 0.96)
-        panel = _mix(primary, white, 0.97)
-    elif style == "minimal":
-        accent = _mix(primary, dark, 0.15)
-        bg_start = (255, 255, 255)
-        bg_end = _mix(primary, white, 0.97)
-        panel = (255, 255, 255)
-    else:
-        accent = _mix(primary, teal, 0.15)
-        bg_start = _mix(primary, white, 0.9)
-        bg_end = _mix(teal, white, 0.93)
-        panel = _mix(primary, white, 0.94)
-
-    accent_strong = _mix(accent, dark, 0.3)
-    accent_soft = _mix(accent, white, 0.82)
-    border = _mix(accent, white, 0.72)
-    text = dark
-    muted = _mix(dark, white, 0.45)
+    tokens = get_theme_tokens(presentation.theme)
+    accent_rgb = _hex_to_rgb(tokens.accent_color)
 
     return {
-        "style_name": style,
-        "font": presentation.theme.font,
-        "accent": _rgb_to_hex(accent),
-        "accent_strong": _rgb_to_hex(accent_strong),
-        "accent_soft": _rgb_to_hex(accent_soft),
-        "bg_start": _rgb_to_hex(bg_start),
-        "bg_end": _rgb_to_hex(bg_end),
-        "panel": _rgb_to_hex(panel),
-        "border": _rgb_to_hex(border),
-        "text": _rgb_to_hex(text),
-        "muted": _rgb_to_hex(muted),
-        "accent_rgb": ", ".join(str(channel) for channel in accent),
+        "style_name": tokens.name,
+        "font": tokens.font_family,
+        "accent": tokens.accent_color,
+        "accent_strong": tokens.accent_color,
+        "accent_soft": tokens.accent_soft_color,
+        "bg_start": tokens.background,
+        "bg_end": tokens.background_alt,
+        "panel": tokens.surface,
+        "border": tokens.border_color,
+        "text": tokens.text_color,
+        "muted": tokens.muted_text_color,
+        "accent_rgb": ", ".join(str(channel) for channel in accent_rgb),
     }
 
 
@@ -105,12 +132,13 @@ def build_slide_context(presentation: Presentation) -> list[dict[str, Any]]:
     slides: list[dict[str, Any]] = []
     for slide in presentation.slides:
         data = slide.model_dump(mode="json")
-        logger.info("Preparing slide context. layout=%s title=%s", data["layout"], data["title"])
+        logger.info("Preparing slide context. type=%s title=%s", data["type"], data["title"])
+        data.update(_slide_text_sizes(data))
         slides.append(
             {
                 **data,
-                "template_name": f"{data['layout']}.html",
-                "image_asset": build_image_context(getattr(slide, "image", None)),
+                "template_name": f"{data['type']}.html",
+                "image_asset": build_image_context(slide),
             }
         )
     return slides

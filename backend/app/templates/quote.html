@@ -1,0 +1,12 @@
+<div class="slide__content quote-layout">
+  <div class="section-label">Quote</div>
+  <blockquote class="quote-block">
+    <p class="quote-block__text" style="font-size: {{ slide.quote_font_size }}px;">{{ slide.quote }}</p>
+    {% if slide.attribution %}
+    <footer class="quote-block__attribution" style="font-size: {{ slide.attribution_font_size }}px;">{{ slide.attribution }}</footer>
+    {% endif %}
+  </blockquote>
+  {% if slide.notes %}
+  <p class="caption" style="font-size: {{ slide.body_font_size }}px;">{{ slide.notes }}</p>
+  {% endif %}
+</div>

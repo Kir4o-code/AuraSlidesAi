@@ -4,6 +4,79 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{ presentation.title }}</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: '{{ theme_tokens.font }}', 'Segoe UI', sans-serif;
+        color: {{ theme_tokens.text }};
+        background: linear-gradient(180deg, {{ theme_tokens.bg_start }} 0%, {{ theme_tokens.bg_end }} 100%);
+      }
+
+      .slide {
+        background:
+          radial-gradient(circle at top right, rgba({{ theme_tokens.accent_rgb }}, 0.22), transparent 34%),
+          radial-gradient(circle at bottom left, rgba({{ theme_tokens.accent_rgb }}, 0.12), transparent 28%),
+          linear-gradient(145deg, {{ theme_tokens.bg_start }} 0%, {{ theme_tokens.bg_end }} 100%);
+      }
+
+      .slide__theme-bar {
+        background: linear-gradient(180deg, {{ theme_tokens.accent }}, {{ theme_tokens.accent_strong }});
+      }
+
+      .slide__glow--one {
+        background: rgba({{ theme_tokens.accent_rgb }}, 0.18);
+      }
+
+      .slide__glow--two {
+        background: rgba({{ theme_tokens.accent_rgb }}, 0.1);
+      }
+
+      .eyebrow,
+      .section-label {
+        color: {{ theme_tokens.accent }};
+      }
+
+      .title,
+      .heading,
+      .bullet-list li,
+      .image-card__query,
+      .hero-image-placeholder__query,
+      .timeline-item__title,
+      .stat-card__value,
+      .quote-block__text {
+        color: {{ theme_tokens.text }};
+      }
+
+      .subtitle,
+      .image-card__meta,
+      .caption,
+      .closing,
+      .timeline-item__detail,
+      .stat-card__detail,
+      .quote-block__attribution {
+        color: {{ theme_tokens.muted }};
+      }
+
+      .image-card,
+      .hero-image-placeholder,
+      .comparison-card,
+      .stat-card,
+      .quote-block {
+        border-color: {{ theme_tokens.border }};
+        background: {{ theme_tokens.panel }};
+        box-shadow: {{ theme_tokens.shadow }};
+      }
+
+      .image-card__badge,
+      .hero-image-placeholder__role {
+        background: {{ theme_tokens.panel }};
+        color: {{ theme_tokens.accent }};
+      }
+
+      .comparison-card--accent {
+        background: linear-gradient(180deg, rgba({{ theme_tokens.accent_rgb }}, 0.09), {{ theme_tokens.panel }});
+      }
+    </style>
   </head>
   <body
     class="theme theme--{{ theme_tokens.style_name }}"
@@ -22,7 +95,7 @@
     "
   >
     {% for slide in slides %}
-    <section class="slide slide--{{ slide.layout }}">
+    <section class="slide slide--{{ slide.type }}">
       <div class="slide__glow slide__glow--one"></div>
       <div class="slide__glow slide__glow--two"></div>
       <div class="slide__theme-bar"></div>

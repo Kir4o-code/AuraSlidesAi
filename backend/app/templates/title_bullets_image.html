@@ -1,0 +1,29 @@
+<div class="slide__content split-layout">
+  <div>
+    <div class="section-label">Highlights</div>
+    <h2 class="heading" style="font-size: {{ slide.heading_font_size }}px;">{{ slide.title }}</h2>
+    <ul class="bullet-list">
+      {% for bullet in slide.bullets %}
+      <li style="font-size: {{ slide.body_font_size }}px;">{{ bullet }}</li>
+      {% endfor %}
+    </ul>
+    {% if slide.notes %}
+    <p class="caption" style="font-size: {{ slide.small_font_size }}px;">{{ slide.notes }}</p>
+    {% endif %}
+  </div>
+  <div class="image-card">
+    <div class="image-card__badge">image prompt</div>
+    {% if slide.image_asset and slide.image_asset.render_src %}
+    <img class="resolved-image" src="{{ slide.image_asset.render_src }}" alt="{{ slide.image_asset.alt }}" />
+    {% else %}
+    <div class="image-card__query">{{ slide.image_prompt }}</div>
+    {% endif %}
+    <div class="image-card__meta">
+      {% if slide.image_asset and slide.image_asset.source %}
+      Source: {{ slide.image_asset.source }}{% if slide.image_asset.license_name %} | {{ slide.image_asset.license_name }}{% endif %}
+      {% else %}
+      Image will be generated from the prompt
+      {% endif %}
+    </div>
+  </div>
+</div>

@@ -1,15 +1,15 @@
 # AuraSlidesAi MVP
 
-Layout-based presentation generator with a Next.js frontend and a FastAPI backend. Gemini 2.5 Flash plans the deck as structured JSON, Gemini 2.5 Flash Image generates slide images, and the backend owns rendering, styling, slide dimensions, and PDF generation.
+Structured presentation generator with a Next.js frontend and a FastAPI backend. Gemini 2.5 Flash plans the deck as structured content JSON, the frontend slide registry and theme engine render the preview, and the backend exports the same platform-independent presentation data to PDF.
 
 ## Stack
 
-- Frontend: Next.js + Tailwind CSS
-- Backend: FastAPI
+- Frontend: Next.js + Tailwind CSS + slide registry preview
+- Backend: FastAPI + structured JSON export
 - AI planning: Gemini 2.5 Flash
 - AI images: Gemini 2.5 Flash Image
-- Templates: Jinja2
-- PDF export: WeasyPrint
+- Theme registry: deterministic design tokens shared by rendering paths
+- PDF export: Chrome headless print-to-PDF
 
 ## Project Structure
 
@@ -73,11 +73,13 @@ The frontend runs on `http://localhost:3000` by default and targets `http://loca
 ## Gemini Pipeline
 
 - `gemini-2.5-flash` generates structured presentation JSON.
-- The backend validates that JSON with Pydantic and normalizes it into the internal slide layouts.
-- Slides that need images are sent to `gemini-2.5-flash-image`.
+- The backend validates the AI JSON with Pydantic and normalizes it into the platform-independent slide schema.
+- The frontend uses a slide registry and theme registry to render the live preview from the returned JSON.
+- Slides that need images are sent to `gemini-2.5-flash-image` for illustrations, hero images, diagrams, or backgrounds.
 - Generated images are cached in `backend/generated/gemini_images/`.
 - The cache key is based on slide content and image prompt, so images are reused unless the slide changes.
 - The final PDF is exported from the validated JSON and any generated images.
+- Set `IMAGE_GEN_SWITCH=false` in `backend/.env` to disable Gemini image generation globally.
 
 ## Notes
 

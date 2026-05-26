@@ -76,11 +76,11 @@ export default function HomePage() {
               AuraSlides AI
             </p>
             <h1 className="mt-4 text-4xl font-semibold tracking-tight text-ink sm:text-5xl">
-              Turn a rough idea into a layout-based presentation PDF.
+              Turn a rough idea into a structured presentation deck.
             </h1>
             <p className="mt-4 max-w-xl text-base leading-7 text-slate-600">
-              The AI picks the title, content, and layout type. The backend
-              keeps control of rendering, typography, spacing, and export.
+              Gemini writes the slide content JSON. The theme engine and slide
+              registry handle layout, typography, spacing, and export.
             </p>
           </div>
 

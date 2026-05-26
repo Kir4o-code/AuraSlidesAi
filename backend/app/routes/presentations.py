@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException, Request, status
 
 from app.schemas.presentation import GeneratePresentationRequest, GeneratePresentationResponse
+from app.services.feature_flags import is_image_generation_enabled
 from app.services.gemini_service import (
     GeminiConfigurationError,
     GeminiPlanningError,
@@ -39,9 +40,20 @@ async def generate_presentation_route(
             slide_count=payload.slide_count,
             style=payload.style,
         )
-        if payload.generate_images:
+        env_image_switch = is_image_generation_enabled()
+        should_generate_images = payload.generate_images and env_image_switch
+        logger.info(
+            "[%s] Image generation flags. request=%s env=%s effective=%s",
+            request_id,
+            payload.generate_images,
+            env_image_switch,
+            should_generate_images,
+        )
+        if should_generate_images:
             logger.info("[%s] Starting Gemini image generation for image slides.", request_id)
             presentation = await enrich_presentation_images(presentation)
+        else:
+            logger.info("[%s] Image generation skipped.", request_id)
         logger.info("[%s] Gemini planning complete. Rendering PDF.", request_id)
         pdf_name = build_pdf(presentation)
         logger.info(

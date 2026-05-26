@@ -1,72 +1,68 @@
-export type LayoutName =
-  | "title"
-  | "bullets"
-  | "bullets_with_image"
-  | "image_focus"
-  | "conclusion";
+export type ThemeName =
+  | "modern_dark"
+  | "modern_light"
+  | "editorial"
+  | "corporate"
+  | "playful";
 
-export type ImageRole =
-  | "background_image"
-  | "main_object"
-  | "icon"
-  | "diagram";
+export type SlideType =
+  | "title_slide"
+  | "title_bullets"
+  | "title_bullets_image"
+  | "hero_image"
+  | "comparison"
+  | "timeline"
+  | "statistics"
+  | "quote";
 
-export interface ImageSpec {
-  query: string;
-  role: ImageRole;
-  remove_background: boolean;
+export interface ResolvedImageAsset {
+  local_path: string;
+  public_url: string;
+  source: string;
+  source_url: string;
+  image_url: string;
+  author: string | null;
+  license_name: string;
+  width?: number | null;
+  height?: number | null;
+  clip_score?: number | null;
+  final_score?: number | null;
 }
 
-export interface Theme {
-  style: string;
-  primary_color: string;
-  font: string;
+export interface TimelineStep {
+  label: string;
+  detail?: string | null;
 }
 
-export interface TitleSlide {
-  layout: "title";
-  title: string;
-  subtitle: string;
+export interface StatisticItem {
+  label: string;
+  value: string;
+  detail?: string | null;
 }
 
-export interface BulletsSlide {
-  layout: "bullets";
-  title: string;
-  bullets: string[];
+export interface PresentationSlide {
+  id: string;
+  type: SlideType;
+  title?: string | null;
+  subtitle?: string | null;
+  bullets?: string[];
+  image_prompt?: string | null;
+  notes?: string | null;
+  left_title?: string | null;
+  right_title?: string | null;
+  left_bullets?: string[];
+  right_bullets?: string[];
+  timeline?: TimelineStep[];
+  statistics?: StatisticItem[];
+  quote?: string | null;
+  attribution?: string | null;
+  resolved_image?: ResolvedImageAsset | null;
 }
-
-export interface BulletsWithImageSlide {
-  layout: "bullets_with_image";
-  title: string;
-  bullets: string[];
-  image: ImageSpec;
-}
-
-export interface ImageFocusSlide {
-  layout: "image_focus";
-  title: string;
-  caption: string;
-  image: ImageSpec;
-}
-
-export interface ConclusionSlide {
-  layout: "conclusion";
-  title: string;
-  bullets: string[];
-  closing: string;
-}
-
-export type Slide =
-  | TitleSlide
-  | BulletsSlide
-  | BulletsWithImageSlide
-  | ImageFocusSlide
-  | ConclusionSlide;
 
 export interface Presentation {
   title: string;
-  theme: Theme;
-  slides: Slide[];
+  theme: ThemeName;
+  slides: PresentationSlide[];
 }
 
 export interface GeneratePresentationPayload {
