@@ -13,7 +13,7 @@ from app.services.gemini_service import (
 )
 from app.services.image_service import enrich_presentation_images
 from app.services.pdf_exporter import PdfExportError
-from app.services.slide_generator import build_pdf
+from app.services.slide_generator import build_presentation_exports
 
 
 router = APIRouter(prefix="/presentations", tags=["presentations"])
@@ -54,11 +54,12 @@ async def generate_presentation_route(
             presentation = await enrich_presentation_images(presentation)
         else:
             logger.info("[%s] Image generation skipped.", request_id)
-        logger.info("[%s] Gemini planning complete. Rendering PDF.", request_id)
-        pdf_name = build_pdf(presentation)
+        logger.info("[%s] Gemini planning complete. Rendering PPTX and PDF.", request_id)
+        pptx_name, pdf_name = build_presentation_exports(presentation)
         logger.info(
-            "[%s] PDF export complete. file=%s duration=%.2fs",
+            "[%s] Presentation export complete. pptx=%s pdf=%s duration=%.2fs",
             request_id,
+            pptx_name,
             pdf_name,
             perf_counter() - started_at,
         )
@@ -94,7 +95,9 @@ async def generate_presentation_route(
         ) from exc
 
     pdf_url = str(request.base_url).rstrip("/") + f"/generated/{pdf_name}"
+    pptx_url = str(request.base_url).rstrip("/") + f"/generated/{pptx_name}"
     return GeneratePresentationResponse(
         presentation=presentation,
+        pptx_url=pptx_url,
         pdf_url=pdf_url,
     )

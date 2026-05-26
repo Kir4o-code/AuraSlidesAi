@@ -13,6 +13,8 @@ export interface ThemeTokens {
   accentSoftColor: string;
   borderColor: string;
   fontFamily: string;
+  headingFontFamily: string;
+  bodyFontFamily: string;
   borderRadius: string;
   shadow: string;
   spacingScale: number;
@@ -30,7 +32,9 @@ export const THEME_REGISTRY: Record<ThemeName, ThemeTokens> = {
     accentColor: "#8b5cf6",
     accentSoftColor: "#c4b5fd",
     borderColor: "rgba(148, 163, 184, 0.22)",
-    fontFamily: "Inter",
+    fontFamily: "Aptos",
+    headingFontFamily: "Aptos Display",
+    bodyFontFamily: "Aptos",
     borderRadius: "28px",
     shadow: "0 28px 80px rgba(15, 23, 42, 0.35)",
     spacingScale: 1,
@@ -46,7 +50,9 @@ export const THEME_REGISTRY: Record<ThemeName, ThemeTokens> = {
     accentColor: "#2563eb",
     accentSoftColor: "#dbeafe",
     borderColor: "#cbd5e1",
-    fontFamily: "Inter",
+    fontFamily: "Calibri",
+    headingFontFamily: "Calibri Light",
+    bodyFontFamily: "Calibri",
     borderRadius: "28px",
     shadow: "0 24px 70px rgba(37, 99, 235, 0.12)",
     spacingScale: 1,
@@ -62,7 +68,9 @@ export const THEME_REGISTRY: Record<ThemeName, ThemeTokens> = {
     accentColor: "#d97706",
     accentSoftColor: "#fde68a",
     borderColor: "#e7e5e4",
-    fontFamily: "Merriweather",
+    fontFamily: "Palatino Linotype",
+    headingFontFamily: "Palatino Linotype",
+    bodyFontFamily: "Georgia",
     borderRadius: "24px",
     shadow: "0 26px 72px rgba(120, 53, 15, 0.12)",
     spacingScale: 1.05,
@@ -78,7 +86,9 @@ export const THEME_REGISTRY: Record<ThemeName, ThemeTokens> = {
     accentColor: "#1d4ed8",
     accentSoftColor: "#bfdbfe",
     borderColor: "#cbd5e1",
-    fontFamily: "Inter",
+    fontFamily: "Segoe UI",
+    headingFontFamily: "Segoe UI Semibold",
+    bodyFontFamily: "Segoe UI",
     borderRadius: "18px",
     shadow: "0 18px 42px rgba(15, 23, 42, 0.12)",
     spacingScale: 0.95,
@@ -94,7 +104,9 @@ export const THEME_REGISTRY: Record<ThemeName, ThemeTokens> = {
     accentColor: "#db2777",
     accentSoftColor: "#fbcfe8",
     borderColor: "#f3c4dd",
-    fontFamily: "Inter",
+    fontFamily: "Trebuchet MS",
+    headingFontFamily: "Trebuchet MS",
+    bodyFontFamily: "Trebuchet MS",
     borderRadius: "30px",
     shadow: "0 26px 72px rgba(219, 39, 119, 0.16)",
     spacingScale: 1.08,
@@ -122,6 +134,8 @@ export function buildThemeStyle(tokens: ThemeTokens): CSSProperties {
     "--presentation-radius": tokens.borderRadius,
     "--presentation-shadow": tokens.shadow,
     "--presentation-font": tokens.fontFamily,
+    "--presentation-heading-font": tokens.headingFontFamily,
+    "--presentation-body-font": tokens.bodyFontFamily,
     "--presentation-spacing": `${tokens.spacingScale}`,
     "--presentation-type-scale": `${tokens.typographyScale}`,
   } as CSSProperties;

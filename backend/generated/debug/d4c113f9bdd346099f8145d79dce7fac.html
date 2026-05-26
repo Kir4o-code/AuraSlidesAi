@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Typography Test</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: 'Aptos', 'Segoe UI', sans-serif;
+        color: #f8fafc;
+        background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+      }
+
+      .slide {
+        background:
+          radial-gradient(circle at top right, rgba(139, 92, 246, 0.22), transparent 34%),
+          radial-gradient(circle at bottom left, rgba(139, 92, 246, 0.12), transparent 28%),
+          linear-gradient(145deg, #0f172a 0%, #111827 100%);
+      }
+
+      .slide__theme-bar {
+        background: linear-gradient(180deg, #8b5cf6, #8b5cf6);
+      }
+
+      .slide__glow--one {
+        background: rgba(139, 92, 246, 0.18);
+      }
+
+      .slide__glow--two {
+        background: rgba(139, 92, 246, 0.1);
+      }
+
+      .eyebrow,
+      .section-label {
+        color: #8b5cf6;
+      }
+
+      .title,
+      .heading,
+      .bullet-list li,
+      .image-card__query,
+      .hero-image-placeholder__query,
+      .timeline-item__title,
+      .stat-card__value,
+      .quote-block__text {
+        color: #f8fafc;
+      }
+
+      .subtitle,
+      .image-card__meta,
+      .caption,
+      .closing,
+      .timeline-item__detail,
+      .stat-card__detail,
+      .quote-block__attribution {
+        color: #cbd5e1;
+      }
+
+      .image-card,
+      .hero-image-placeholder,
+      .comparison-card,
+      .stat-card,
+      .quote-block {
+        border-color: rgba(148, 163, 184, 0.22);
+        background: #111c34;
+        box-shadow: ;
+      }
+
+      .image-card__badge,
+      .hero-image-placeholder__role {
+        background: #111c34;
+        color: #8b5cf6;
+      }
+
+      .comparison-card--accent {
+        background: linear-gradient(180deg, rgba(139, 92, 246, 0.09), #111c34);
+      }
+    </style>
+  </head>
+  <body
+    class="theme theme--modern_dark"
+    style="
+      --bg-start: #0f172a;
+      --bg-end: #111827;
+      --panel: #111c34;
+      --text: #f8fafc;
+      --muted: #cbd5e1;
+      --accent: #8b5cf6;
+      --accent-strong: #8b5cf6;
+      --accent-soft: #c4b5fd;
+      --border: rgba(148, 163, 184, 0.22);
+      --accent-rgb: 139, 92, 246;
+      --font-display: 'Aptos', 'Segoe UI', sans-serif;
+    "
+  >
+    
+    <section class="slide slide--title_slide">
+      <div class="slide__glow slide__glow--one"></div>
+      <div class="slide__glow slide__glow--two"></div>
+      <div class="slide__theme-bar"></div>
+      <div class="slide__content slide__content--center">
+  <div class="eyebrow">AI-generated presentation</div>
+  <h1 class="title" style="font-size: 50px;">A Strong Title Slide</h1>
+  
+  <p class="subtitle" style="font-size: 22px;">Subtitle for spacing check</p>
+  
+  
+</div>
+    </section>
+    
+    <section class="slide slide--title_bullets">
+      <div class="slide__glow slide__glow--one"></div>
+      <div class="slide__glow slide__glow--two"></div>
+      <div class="slide__theme-bar"></div>
+      <div class="slide__content">
+  <div class="section-label">Key Points</div>
+  <h2 class="heading" style="font-size: 37px;">Important Points</h2>
+  <ul class="bullet-list">
+    
+    <li style="font-size: 19px;">1</li>
+    
+    <li style="font-size: 19px;">2</li>
+    
+    <li style="font-size: 19px;">3</li>
+    
+  </ul>
+  
+</div>
+    </section>
+    
+    <section class="slide slide--quote">
+      <div class="slide__glow slide__glow--one"></div>
+      <div class="slide__glow slide__glow--two"></div>
+      <div class="slide__theme-bar"></div>
+      <div class="slide__content quote-layout">
+  <div class="section-label">Quote</div>
+  <blockquote class="quote-block">
+    <p class="quote-block__text" style="font-size: 30px;">Spacing and fonts should be consistent.</p>
+    
+    <footer class="quote-block__attribution" style="font-size: 14px;">Test Author</footer>
+    
+  </blockquote>
+  
+</div>
+    </section>
+    
+  </body>
+</html>

@@ -123,4 +123,5 @@ class GeneratePresentationRequest(BaseModel):
 
 class GeneratePresentationResponse(BaseModel):
     presentation: Presentation
+    pptx_url: str
     pdf_url: str

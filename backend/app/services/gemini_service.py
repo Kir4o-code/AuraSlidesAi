@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -183,10 +184,52 @@ def get_client() -> genai.Client:
 
 
 def _normalize_bullets(values: list[str], limit: int, fallback: list[str]) -> list[str]:
-    cleaned = [item.strip(" -") for item in values if isinstance(item, str) and item.strip()]
+    cleaned: list[str] = []
+    for item in values:
+        if not isinstance(item, str):
+            continue
+        candidate = item.strip(" -;,")
+        if not candidate:
+            continue
+
+        normalized = re.sub(r"\s+", " ", candidate).strip().lower().strip(" .,:;")
+        if not normalized:
+            continue
+        if re.fullmatch(r"\d+[.)]?", normalized):
+            continue
+        if re.fullmatch(r"(?:key|main|important|supporting|central|core|major|primary|secondary)?\s*(?:point|idea|ideas|bullet|bullets|points)(?: \d+)?", normalized):
+            continue
+        if len(normalized.split()) <= 5 and re.search(r"\b(point|points|idea|ideas|bullet|bullets)\b", normalized):
+            continue
+        if re.search(r"\b(?:key|main|important|supporting)\b", normalized) and re.search(r"\b(?:point|idea|bullet)\b", normalized):
+            continue
+        cleaned.append(candidate)
     if cleaned:
         return cleaned[:limit]
     return fallback[:limit]
+
+
+def _fallback_bullets_for_slide(title: str, presentation_title: str, *, variant: str = "default", slot: int = 0) -> list[str]:
+    context = title or presentation_title or "this topic"
+    templates = {
+        "default": [
+            [f"Overview of {context}", "Most important detail", "Recommended next step"],
+            [f"Why {context} matters", "What changes", "Immediate takeaway"],
+            [f"How {context} works", "Main constraint", "Best next action"],
+        ],
+        "image": [
+            [f"Overview of {context}", "Visual reference or supporting idea", "Practical takeaway"],
+            [f"Why the image matters", "What it shows", "How to use it"],
+            [f"Main message", "Image support", "Next action"],
+        ],
+        "comparison": [
+            [f"Strengths of {context}", "Tradeoffs to consider", "Best fit or next step"],
+            [f"What {context} does well", "Where it falls short", "When to choose it"],
+            [f"Option one", "Option two", "Recommended path"],
+        ],
+    }
+    choices = templates.get(variant, templates["default"])
+    return choices[slot % len(choices)]
 
 
 def _trim_text(value: str | None, limit: int) -> str | None:
@@ -196,6 +239,46 @@ def _trim_text(value: str | None, limit: int) -> str | None:
     if not cleaned:
         return None
     return cleaned[:limit]
+
+
+def _looks_generic_title(value: str | None) -> bool:
+    if not value:
+        return True
+    normalized = re.sub(r"\s+", " ", value.strip().lower())
+    normalized = normalized.strip(" .,:;")
+    if not normalized:
+        return True
+    if re.search(r"[;,|/]", normalized) and re.search(r"\b(point|idea|bullet)\b", normalized):
+        return True
+    return bool(
+        re.fullmatch(r"(?:key|supporting|main|important|central|core|major|primary|secondary)? ?ideas?(?: \d+)?", normalized)
+        or re.fullmatch(r"(?:key|supporting|main|important|central|core|major|primary|secondary)? ?idea(?: \d+)?", normalized)
+        or (len(normalized.split()) <= 5 and re.search(r"\b(point|idea|bullet)\b", normalized))
+    )
+
+
+def _fallback_slide_title(presentation_title: str, index: int, *, variant: str = "default") -> str:
+    context = presentation_title or "this topic"
+    titles = {
+        "default": [
+            f"More on {context}",
+            f"A different angle on {context}",
+            f"What to do next with {context}",
+            f"Additional detail on {context}",
+        ],
+        "image": [
+            f"Visual context for {context}",
+            f"A closer look at {context}",
+            f"Image-backed insight for {context}",
+        ],
+        "comparison": [
+            f"Comparing options for {context}",
+            f"Why this matters for {context}",
+            f"Tradeoffs for {context}",
+        ],
+    }
+    options = titles.get(variant, titles["default"])
+    return options[(index - 1) % len(options)]
 
 
 def _normalize_timeline(steps: list[GeminiTimelineStep]) -> list[GeminiTimelineStep]:
@@ -241,18 +324,18 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
         slide.bullets = []
         slide.image_prompt = None
     elif slide.type == SlideType.TITLE_BULLETS.value:
-        slide.title = slide.title or "Key ideas"
+        slide.title = slide.title if not _looks_generic_title(slide.title) else _fallback_slide_title(presentation_title, index)
         slide.bullets = _normalize_bullets(
             slide.bullets,
             limit=6,
-            fallback=["Core idea", "Supporting detail", "Practical takeaway"],
+            fallback=_fallback_bullets_for_slide(slide.title or presentation_title, presentation_title, slot=index),
         )
     elif slide.type == SlideType.TITLE_BULLETS_IMAGE.value:
-        slide.title = slide.title or "Key ideas"
+        slide.title = slide.title if not _looks_generic_title(slide.title) else _fallback_slide_title(presentation_title, index, variant="image")
         slide.bullets = _normalize_bullets(
             slide.bullets,
             limit=5,
-            fallback=["Core idea", "Supporting detail", "Practical takeaway"],
+            fallback=_fallback_bullets_for_slide(slide.title or presentation_title, presentation_title, variant="image", slot=index),
         )
         slide.image_prompt = slide.image_prompt or f"Modern presentation illustration for {slide.title}"
     elif slide.type == SlideType.HERO_IMAGE.value:
@@ -266,12 +349,12 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
         slide.left_bullets = _normalize_bullets(
             slide.left_bullets,
             limit=4,
-            fallback=["Strong points", "Good fit"],
+            fallback=_fallback_bullets_for_slide(slide.left_title or slide.title or presentation_title, presentation_title, variant="comparison", slot=index)[:2],
         )
         slide.right_bullets = _normalize_bullets(
             slide.right_bullets,
             limit=4,
-            fallback=["Tradeoffs", "Considerations"],
+            fallback=_fallback_bullets_for_slide(slide.right_title or slide.title or presentation_title, presentation_title, variant="comparison", slot=index + 1)[1:],
         )
     elif slide.type == SlideType.TIMELINE.value:
         slide.title = slide.title or "Timeline"
@@ -295,8 +378,8 @@ def _normalize_plan(plan: GeminiPresentationPlan, slide_count: int) -> GeminiPre
             GeminiSlidePlan(type=SlideType.TITLE_SLIDE.value, title=plan.title, subtitle="Presentation overview"),
             GeminiSlidePlan(
                 type=SlideType.TITLE_BULLETS.value,
-                title="Key ideas",
-                bullets=["Core idea", "Supporting detail", "Practical takeaway"],
+                title=_fallback_slide_title(plan.title, 2),
+                bullets=_fallback_bullets_for_slide(plan.title, plan.title, slot=2),
             ),
             GeminiSlidePlan(
                 type=SlideType.QUOTE.value,
@@ -313,8 +396,8 @@ def _normalize_plan(plan: GeminiPresentationPlan, slide_count: int) -> GeminiPre
         slides.append(
             GeminiSlidePlan(
                 type=SlideType.TITLE_BULLETS.value,
-                title=f"Supporting idea {len(slides)}",
-                bullets=["Core idea", "Practical implication", "Why it matters"],
+                title=_fallback_slide_title(plan.title, len(slides) + 1),
+                bullets=_fallback_bullets_for_slide(plan.title, plan.title, slot=len(slides) + 1),
             )
         )
 
@@ -323,6 +406,30 @@ def _normalize_plan(plan: GeminiPresentationPlan, slide_count: int) -> GeminiPre
         _normalize_slide_plan(slide, plan.title, index + 1)
         for index, slide in enumerate(slides)
     ]
+
+    seen_signatures: set[tuple[Any, ...]] = set()
+    for index, slide in enumerate(normalized_slides, start=1):
+        signature = (
+            slide.type,
+            (slide.title or "").strip().lower(),
+            tuple(bullet.strip().lower() for bullet in slide.bullets),
+            tuple(bullet.strip().lower() for bullet in slide.left_bullets),
+            tuple(bullet.strip().lower() for bullet in slide.right_bullets),
+            slide.quote or "",
+            slide.attribution or "",
+        )
+        if signature in seen_signatures and slide.type in {
+            SlideType.TITLE_BULLETS.value,
+            SlideType.TITLE_BULLETS_IMAGE.value,
+        }:
+            if slide.type == SlideType.TITLE_BULLETS.value:
+                slide.title = _fallback_slide_title(plan.title, index)
+                slide.bullets = _fallback_bullets_for_slide(plan.title, plan.title, slot=index)
+            else:
+                slide.title = _fallback_slide_title(plan.title, index, variant="image")
+                slide.bullets = _fallback_bullets_for_slide(plan.title, plan.title, variant="image", slot=index)
+        seen_signatures.add(signature)
+
     return GeminiPresentationPlan(
         title=plan.title,
         theme=resolve_theme_name(plan.theme),

@@ -16,12 +16,18 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 WORKER_MODULE = "app.services.weasyprint_worker"
 PDF_EXPORT_TIMEOUT_SECONDS = int(os.getenv("PDF_EXPORT_TIMEOUT_SECONDS", "45"))
 PDF_EXPORT_ENGINE = os.getenv("PDF_EXPORT_ENGINE", "auto").lower()
+PDF_EXPORT_PPTX_ENABLED = os.getenv("PDF_EXPORT_PPTX_ENABLED", "true").lower() not in {"false", "0", "off", "no"}
 CHROME_CANDIDATES = (
     Path(os.getenv("CHROME_PATH", "")) if os.getenv("CHROME_PATH") else None,
     Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
     Path(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
     Path(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
     Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+)
+LIBREOFFICE_CANDIDATES = (
+    Path(os.getenv("LIBREOFFICE_PATH", "")) if os.getenv("LIBREOFFICE_PATH") else None,
+    Path(r"C:\Program Files\LibreOffice\program\soffice.exe"),
+    Path(r"C:\Program Files (x86)\LibreOffice\program\soffice.exe"),
 )
 
 
@@ -34,6 +40,13 @@ def _inject_stylesheet(html: str, css_text: str) -> str:
 
 def _find_browser_executable() -> Path | None:
     for candidate in CHROME_CANDIDATES:
+        if candidate and candidate.exists():
+            return candidate
+    return None
+
+
+def _find_libreoffice_executable() -> Path | None:
+    for candidate in LIBREOFFICE_CANDIDATES:
         if candidate and candidate.exists():
             return candidate
     return None
@@ -92,6 +105,53 @@ def _export_with_browser(
         raise PdfExportError(f"Browser PDF export failed with exit code {result.returncode}.")
     if not output_path.exists() or output_path.stat().st_size == 0:
         raise PdfExportError("Browser PDF export finished without creating a PDF file.")
+
+
+def _export_with_libreoffice(pptx_path: Path, output_path: Path) -> None:
+    libreoffice = _find_libreoffice_executable()
+    if libreoffice is None:
+        raise PdfExportError(
+            "LibreOffice was not found. Set LIBREOFFICE_PATH or install LibreOffice for native PPTX to PDF conversion."
+        )
+
+    output_dir = output_path.parent
+    logger.info(
+        "LibreOffice export starting. input=%s output=%s timeout=%ss",
+        pptx_path,
+        output_path,
+        PDF_EXPORT_TIMEOUT_SECONDS,
+    )
+    command = [
+        str(libreoffice),
+        "--headless",
+        "--nologo",
+        "--nolockcheck",
+        "--nodefault",
+        "--convert-to",
+        "pdf",
+        "--outdir",
+        str(output_dir),
+        str(pptx_path),
+    ]
+    result = subprocess.run(
+        command,
+        cwd=BACKEND_DIR,
+        capture_output=True,
+        text=True,
+        timeout=PDF_EXPORT_TIMEOUT_SECONDS,
+        check=False,
+    )
+    if result.stdout.strip():
+        logger.info("LibreOffice stdout:\n%s", result.stdout.strip())
+    if result.stderr.strip():
+        logger.warning("LibreOffice stderr:\n%s", result.stderr.strip())
+    converted_path = output_dir / f"{pptx_path.stem}.pdf"
+    if not converted_path.exists() or converted_path.stat().st_size == 0:
+        raise PdfExportError("LibreOffice finished without creating a PDF file.")
+    if converted_path != output_path:
+        if output_path.exists():
+            output_path.unlink()
+        converted_path.replace(output_path)
 
 
 def _export_with_weasyprint(
@@ -177,15 +237,23 @@ def _export_with_xhtml2pdf(
     logger.info("xhtml2pdf export finished. output=%s bytes=%s", output_path, output_path.stat().st_size)
 
 
-def export_pdf(html: str, css_path: Path, output_path: Path, base_url: Path) -> None:
-    if PDF_EXPORT_ENGINE == "chrome":
-        engines = ["chrome"]
-    elif PDF_EXPORT_ENGINE == "weasyprint":
-        engines = ["weasyprint"]
-    elif PDF_EXPORT_ENGINE == "xhtml2pdf":
-        engines = ["xhtml2pdf"]
+def export_pdf(
+    pptx_path: Path,
+    output_path: Path,
+    *,
+    html_fallback: str | None = None,
+    css_path: Path | None = None,
+    base_url: Path | None = None,
+) -> None:
+    if not PDF_EXPORT_PPTX_ENABLED:
+        raise PdfExportError("PDF export is disabled. Enable PDF export if you need a PDF alongside the PPTX.")
+
+    if PDF_EXPORT_ENGINE == "browser":
+        engines = ["browser"]
+    elif PDF_EXPORT_ENGINE == "libreoffice":
+        engines = ["libreoffice"]
     else:
-        engines = ["chrome", "weasyprint", "xhtml2pdf"]
+        engines = ["libreoffice", "browser"]
     failures: list[str] = []
     try:
         started_at = perf_counter()
@@ -194,12 +262,12 @@ def export_pdf(html: str, css_path: Path, output_path: Path, base_url: Path) -> 
                 output_path.unlink()
             try:
                 logger.info("Attempting PDF export with engine=%s", engine)
-                if engine == "chrome":
-                    _export_with_browser(html, css_path, output_path, base_url)
-                elif engine == "weasyprint":
-                    _export_with_weasyprint(html, css_path, output_path, base_url)
-                elif engine == "xhtml2pdf":
-                    _export_with_xhtml2pdf(html, css_path, output_path, base_url)
+                if engine == "libreoffice":
+                    _export_with_libreoffice(pptx_path, output_path)
+                elif engine == "browser":
+                    if html_fallback is None or css_path is None or base_url is None:
+                        raise PdfExportError("Browser fallback needs html_fallback, css_path, and base_url.")
+                    _export_with_browser(html_fallback, css_path, output_path, base_url)
                 else:
                     raise PdfExportError(f"Unsupported PDF export engine: {engine}")
                 logger.info("PDF export succeeded with engine=%s", engine)
@@ -211,6 +279,8 @@ def export_pdf(html: str, css_path: Path, output_path: Path, base_url: Path) -> 
                 )
                 failures.append(message)
                 logger.exception("PDF export timeout with engine=%s", engine)
+                if engine != engines[-1]:
+                    continue
                 raise PdfExportError(message) from exc
             except PdfExportError as exc:
                 failures.append(f"{engine}: {exc}")

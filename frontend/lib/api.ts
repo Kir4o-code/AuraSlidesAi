@@ -74,6 +74,7 @@ export interface GeneratePresentationPayload {
 
 export interface GeneratePresentationResponse {
   presentation: Presentation;
+  pptx_url: string;
   pdf_url: string;
 }
 

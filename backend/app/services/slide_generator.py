@@ -9,6 +9,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from app.schemas.presentation import Presentation
 from app.services.image_service import build_image_context
 from app.services.pdf_exporter import export_pdf
+from app.services.pptx_generator import build_pptx
 from app.services.theme_registry import get_theme_tokens
 
 
@@ -163,20 +164,28 @@ def render_presentation_html(presentation: Presentation) -> str:
     return html
 
 
-def build_pdf(presentation: Presentation) -> str:
-    logger.info("Starting slide rendering and PDF build.")
+def build_presentation_exports(presentation: Presentation) -> tuple[str, str]:
+    logger.info("Starting PPTX-first slide rendering and PDF build.")
     html = render_presentation_html(presentation)
     asset_id = uuid4().hex
-    output_name = f"{asset_id}.pdf"
-    output_path = OUTPUT_DIR / output_name
+    pptx_name = build_pptx(presentation, asset_id=asset_id)
+    pptx_path = OUTPUT_DIR / pptx_name
+    pdf_name = f"{asset_id}.pdf"
+    output_path = OUTPUT_DIR / pdf_name
     debug_html_path = DEBUG_DIR / f"{asset_id}.html"
     css_path = STATIC_DIR / "styles.css"
     debug_html_path.write_text(html, encoding="utf-8")
     logger.info("Saved debug HTML snapshot to %s", debug_html_path)
     export_pdf(
-        html=html,
+        pptx_path,
+        output_path,
+        html_fallback=html,
         css_path=css_path,
-        output_path=output_path,
         base_url=APP_DIR,
     )
-    return output_name
+    return pptx_name, pdf_name
+
+
+def build_pdf(presentation: Presentation) -> str:
+    _, pdf_name = build_presentation_exports(presentation)
+    return pdf_name

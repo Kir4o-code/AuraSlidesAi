@@ -35,7 +35,7 @@ function SlideShell({
         borderColor: tokens.borderColor,
         boxShadow: tokens.shadow,
         color: tokens.textColor,
-        fontFamily: tokens.fontFamily,
+        fontFamily: tokens.bodyFontFamily,
       }}
     >
       <div
@@ -102,19 +102,19 @@ function TitleSlideRenderer({ slide, presentation, exportMode }: SlideRendererPr
   return (
     <SlideShell tokens={tokens} accentLabel="title slide" exportMode={exportMode}>
       <div className="flex h-full flex-col items-center justify-center text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.3em]" style={{ color: tokens.accentColor }}>
+        <p className="text-xs font-semibold uppercase tracking-[0.3em]" style={{ color: tokens.accentColor, fontFamily: tokens.headingFontFamily }}>
           AI-generated presentation
         </p>
-        <h2 className="mt-4 max-w-4xl text-[clamp(2.25rem,4.8vw,4.75rem)] font-semibold leading-none tracking-[-0.06em]" style={{ color: tokens.textColor }}>
+        <h2 className="mt-4 max-w-4xl text-[clamp(2.25rem,4.8vw,4.75rem)] font-semibold leading-none tracking-[-0.06em]" style={{ color: tokens.textColor, fontFamily: tokens.headingFontFamily }}>
           {slide.title}
         </h2>
         {slide.subtitle ? (
-          <p className="mt-5 max-w-3xl text-lg leading-8" style={{ color: tokens.mutedTextColor }}>
+          <p className="mt-5 max-w-3xl text-lg leading-8" style={{ color: tokens.mutedTextColor, fontFamily: tokens.bodyFontFamily }}>
             {slide.subtitle}
           </p>
         ) : null}
         {slide.notes ? (
-          <p className="mt-6 max-w-2xl text-sm leading-6" style={{ color: tokens.mutedTextColor }}>
+          <p className="mt-6 max-w-2xl text-sm leading-6" style={{ color: tokens.mutedTextColor, fontFamily: tokens.bodyFontFamily }}>
             {slide.notes}
           </p>
         ) : null}
@@ -129,10 +129,10 @@ function BulletsSlideRenderer({ slide, presentation, exportMode }: SlideRenderer
     <SlideShell tokens={tokens} accentLabel="bullet slide" exportMode={exportMode}>
       <div className="flex h-full flex-col justify-between gap-5">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: tokens.accentColor }}>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: tokens.accentColor, fontFamily: tokens.headingFontFamily }}>
             Key points
           </p>
-          <h3 className="mt-3 max-w-3xl text-[clamp(1.9rem,3vw,3.2rem)] font-semibold leading-tight tracking-[-0.04em]" style={{ color: tokens.textColor }}>
+          <h3 className="mt-3 max-w-3xl text-[clamp(1.9rem,3vw,3.2rem)] font-semibold leading-tight tracking-[-0.04em]" style={{ color: tokens.textColor, fontFamily: tokens.headingFontFamily }}>
             {slide.title}
           </h3>
         </div>
@@ -161,10 +161,10 @@ function ImageBulletsSlideRenderer({ slide, presentation, exportMode }: SlideRen
       <div className="grid h-full gap-5 lg:grid-cols-[1.05fr_0.95fr]">
         <div className="flex flex-col justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: tokens.accentColor }}>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: tokens.accentColor, fontFamily: tokens.headingFontFamily }}>
               Highlights
             </p>
-            <h3 className="mt-3 max-w-3xl text-[clamp(1.8rem,3vw,3.2rem)] font-semibold leading-tight tracking-[-0.04em]" style={{ color: tokens.textColor }}>
+            <h3 className="mt-3 max-w-3xl text-[clamp(1.8rem,3vw,3.2rem)] font-semibold leading-tight tracking-[-0.04em]" style={{ color: tokens.textColor, fontFamily: tokens.headingFontFamily }}>
               {slide.title}
             </h3>
           </div>
@@ -193,19 +193,19 @@ function HeroImageSlideRenderer({ slide, presentation, exportMode }: SlideRender
     <SlideShell tokens={tokens} accentLabel="hero image" exportMode={exportMode}>
       <div className="grid h-full gap-5 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="flex flex-col justify-center gap-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: tokens.accentColor }}>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: tokens.accentColor, fontFamily: tokens.headingFontFamily }}>
             Visual focus
           </p>
-          <h3 className="max-w-2xl text-[clamp(2rem,3.6vw,4rem)] font-semibold leading-none tracking-[-0.05em]" style={{ color: tokens.textColor }}>
+          <h3 className="max-w-2xl text-[clamp(2rem,3.6vw,4rem)] font-semibold leading-none tracking-[-0.05em]" style={{ color: tokens.textColor, fontFamily: tokens.headingFontFamily }}>
             {slide.title}
           </h3>
           {slide.subtitle ? (
-            <p className="max-w-xl text-lg leading-8" style={{ color: tokens.mutedTextColor }}>
+            <p className="max-w-xl text-lg leading-8" style={{ color: tokens.mutedTextColor, fontFamily: tokens.bodyFontFamily }}>
               {slide.subtitle}
             </p>
           ) : null}
           {slide.notes ? (
-            <p className="max-w-xl text-sm leading-6" style={{ color: tokens.mutedTextColor }}>
+            <p className="max-w-xl text-sm leading-6" style={{ color: tokens.mutedTextColor, fontFamily: tokens.bodyFontFamily }}>
               {slide.notes}
             </p>
           ) : null}
@@ -222,21 +222,21 @@ function ComparisonSlideRenderer({ slide, presentation, exportMode }: SlideRende
     <SlideShell tokens={tokens} accentLabel="comparison" exportMode={exportMode}>
       <div className="flex h-full flex-col gap-5">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: tokens.accentColor }}>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em]" style={{ color: tokens.accentColor, fontFamily: tokens.headingFontFamily }}>
             Compare
           </p>
-          <h3 className="mt-3 max-w-3xl text-[clamp(1.9rem,3vw,3.2rem)] font-semibold leading-tight tracking-[-0.04em]" style={{ color: tokens.textColor }}>
+          <h3 className="mt-3 max-w-3xl text-[clamp(1.9rem,3vw,3.2rem)] font-semibold leading-tight tracking-[-0.04em]" style={{ color: tokens.textColor, fontFamily: tokens.headingFontFamily }}>
             {slide.title}
           </h3>
           {slide.notes ? (
-            <p className="mt-3 max-w-3xl text-sm leading-6" style={{ color: tokens.mutedTextColor }}>
+            <p className="mt-3 max-w-3xl text-sm leading-6" style={{ color: tokens.mutedTextColor, fontFamily: tokens.bodyFontFamily }}>
               {slide.notes}
             </p>
           ) : null}
         </div>
         <div className="grid flex-1 gap-4 lg:grid-cols-2">
           <section className="rounded-[24px] border p-5" style={{ borderColor: tokens.borderColor, backgroundColor: `${tokens.surface}e8` }}>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em]" style={{ color: tokens.accentColor }}>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em]" style={{ color: tokens.accentColor, fontFamily: tokens.headingFontFamily }}>
               {slide.left_title}
             </p>
             <ul className="mt-4 grid gap-3">
@@ -248,7 +248,7 @@ function ComparisonSlideRenderer({ slide, presentation, exportMode }: SlideRende
             </ul>
           </section>
           <section className="rounded-[24px] border p-5" style={{ borderColor: tokens.borderColor, background: `linear-gradient(180deg, ${tokens.accentSoftColor}22, ${tokens.surface})` }}>
-            <p className="text-sm font-semibold uppercase tracking-[0.22em]" style={{ color: tokens.accentColor }}>
+            <p className="text-sm font-semibold uppercase tracking-[0.22em]" style={{ color: tokens.accentColor, fontFamily: tokens.headingFontFamily }}>
               {slide.right_title}
             </p>
             <ul className="mt-4 grid gap-3">

@@ -15,6 +15,8 @@ class ThemeTokens:
     accent_soft_color: str
     border_color: str
     font_family: str
+    heading_font_family: str
+    body_font_family: str
     border_radius: str
     shadow: str
     spacing_scale: float
@@ -32,7 +34,9 @@ THEME_REGISTRY: dict[str, ThemeTokens] = {
         accent_color="#8b5cf6",
         accent_soft_color="#c4b5fd",
         border_color="rgba(148, 163, 184, 0.22)",
-        font_family="Inter",
+        font_family="Aptos",
+        heading_font_family="Aptos Display",
+        body_font_family="Aptos",
         border_radius="28px",
         shadow="0 28px 80px rgba(15, 23, 42, 0.35)",
         spacing_scale=1.0,
@@ -48,7 +52,9 @@ THEME_REGISTRY: dict[str, ThemeTokens] = {
         accent_color="#2563eb",
         accent_soft_color="#dbeafe",
         border_color="#cbd5e1",
-        font_family="Inter",
+        font_family="Calibri",
+        heading_font_family="Calibri Light",
+        body_font_family="Calibri",
         border_radius="28px",
         shadow="0 24px 70px rgba(37, 99, 235, 0.12)",
         spacing_scale=1.0,
@@ -64,7 +70,9 @@ THEME_REGISTRY: dict[str, ThemeTokens] = {
         accent_color="#d97706",
         accent_soft_color="#fde68a",
         border_color="#e7e5e4",
-        font_family="Merriweather",
+        font_family="Palatino Linotype",
+        heading_font_family="Palatino Linotype",
+        body_font_family="Georgia",
         border_radius="24px",
         shadow="0 26px 72px rgba(120, 53, 15, 0.12)",
         spacing_scale=1.05,
@@ -80,7 +88,9 @@ THEME_REGISTRY: dict[str, ThemeTokens] = {
         accent_color="#1d4ed8",
         accent_soft_color="#bfdbfe",
         border_color="#cbd5e1",
-        font_family="Inter",
+        font_family="Segoe UI",
+        heading_font_family="Segoe UI Semibold",
+        body_font_family="Segoe UI",
         border_radius="18px",
         shadow="0 18px 42px rgba(15, 23, 42, 0.12)",
         spacing_scale=0.95,
@@ -96,7 +106,9 @@ THEME_REGISTRY: dict[str, ThemeTokens] = {
         accent_color="#db2777",
         accent_soft_color="#fbcfe8",
         border_color="#f3c4dd",
-        font_family="Inter",
+        font_family="Trebuchet MS",
+        heading_font_family="Trebuchet MS",
+        body_font_family="Trebuchet MS",
         border_radius="30px",
         shadow="0 26px 72px rgba(219, 39, 119, 0.16)",
         spacing_scale=1.08,

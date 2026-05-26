@@ -9,7 +9,7 @@ Structured presentation generator with a Next.js frontend and a FastAPI backend.
 - AI planning: Gemini 2.5 Flash
 - AI images: Gemini 2.5 Flash Image
 - Theme registry: deterministic design tokens shared by rendering paths
-- PDF export: Chrome headless print-to-PDF
+- Export: PPTX first, optional PDF conversion
 
 ## Project Structure
 

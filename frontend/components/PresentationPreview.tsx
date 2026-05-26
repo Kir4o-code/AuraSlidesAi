@@ -88,14 +88,24 @@ export function PresentationPreview({
           </h2>
         </div>
 
-        <a
-          href={result.pdf_url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-ink transition hover:border-slate-400 hover:bg-slate-50"
-        >
-          Download PDF
-        </a>
+        <div className="flex flex-wrap gap-3">
+          <a
+            href={result.pptx_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-ink transition hover:border-slate-400 hover:bg-slate-50"
+          >
+            Download PPTX
+          </a>
+          <a
+            href={result.pdf_url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-ink transition hover:border-slate-400 hover:bg-slate-50"
+          >
+            Download PDF
+          </a>
+        </div>
       </div>
 
       <div className="mt-5 grid gap-4 md:grid-cols-3">
