@@ -70,11 +70,11 @@ def main() -> int:
         client = genai.Client(api_key=api_key)
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash-image",
+            model="gemini-3-pro-image-preview",
             contents=PROMPT,
             config=types.GenerateContentConfig(
-                response_modalities=["IMAGE"],
-                image_config=types.ImageConfig(aspect_ratio="16:9"),
+                response_modalities=["TEXT", "IMAGE"],
+                image_config=types.ImageConfig(aspect_ratio="16:9", image_size="1K"),
             ),
         )
 

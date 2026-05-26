@@ -7,7 +7,7 @@ Structured presentation generator with a Next.js frontend and a FastAPI backend.
 - Frontend: Next.js + Tailwind CSS + slide registry preview
 - Backend: FastAPI + structured JSON export
 - AI planning: Gemini 2.5 Flash
-- AI images: Gemini 2.5 Flash Image
+- AI images: Nano Banana Pro (`gemini-3-pro-image-preview`)
 - Theme registry: deterministic design tokens shared by rendering paths
 - Export: PPTX first, optional PDF conversion
 
@@ -45,7 +45,7 @@ Backend endpoints:
 - `POST /presentations/generate`
 - `GET /health`
 - `GET /generated/<file>.pdf`
-- `GET /generated/gemini_images/<file>.png`
+- `GET /generated/optimized_images/<file>.jpg`
 
 ## Frontend Setup
 
@@ -75,14 +75,13 @@ The frontend runs on `http://localhost:3000` by default and targets `http://loca
 - `gemini-2.5-flash` generates structured presentation JSON.
 - The backend validates the AI JSON with Pydantic and normalizes it into the platform-independent slide schema.
 - The frontend uses a slide registry and theme registry to render the live preview from the returned JSON.
-- Slides that need images are sent to `gemini-2.5-flash-image` for illustrations, hero images, diagrams, or backgrounds.
-- Generated images are cached in `backend/generated/gemini_images/`.
+- Image-backed slides are sent to Nano Banana Pro (`gemini-3-pro-image-preview`) for illustrations, hero images, diagrams, or backgrounds.
+- Generated images are optimized and stored in `backend/generated/optimized_images/`.
 - The cache key is based on slide content and image prompt, so images are reused unless the slide changes.
 - The final PDF is exported from the validated JSON and any generated images.
-- Set `IMAGE_GEN_SWITCH=false` in `backend/.env` to disable Gemini image generation globally.
 
 ## Notes
 
 - PDFs are stored locally in `backend/generated/`.
-- Generated images are stored locally in `backend/generated/gemini_images/`.
+- Generated images are stored locally in `backend/generated/optimized_images/`.
 - The schema is built to support future features like saved presentations, async jobs, editor workflows, and richer asset processing.

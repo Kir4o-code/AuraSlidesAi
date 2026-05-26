@@ -69,7 +69,6 @@ export interface GeneratePresentationPayload {
   prompt: string;
   slide_count: number;
   style: string;
-  generate_images?: boolean;
 }
 
 export interface GeneratePresentationResponse {

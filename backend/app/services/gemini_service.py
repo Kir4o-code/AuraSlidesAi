@@ -1,14 +1,17 @@
 import asyncio
+import base64
 import hashlib
 import json
 import logging
 import re
 from functools import lru_cache
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
 from pydantic import BaseModel, Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -27,7 +30,7 @@ class GeminiSettings(BaseSettings):
 
     gemini_api_key: str
     gemini_planning_model: str = "gemini-2.5-flash"
-    gemini_image_model: str = "gemini-2.5-flash-image"
+    gemini_image_model: str = "gemini-3-pro-image-preview"
 
 
 class GeminiServiceError(Exception):
@@ -152,7 +155,8 @@ Rules:
 - Choose slide types from: title_slide, title_bullets, title_bullets_image, hero_image, comparison, timeline, statistics, quote.
 - Never generate HTML, CSS, inline styles, positioning, spacing, colors, or fonts.
 - Keep slide content concise and presentation-ready.
-- Use image_prompt only for illustrations, hero images, diagrams, or backgrounds.
+- Prefer image-backed slides for normal content: use title_bullets_image instead of title_bullets when a visual can support the message.
+- Use image_prompt for illustrations, hero images, diagrams, or backgrounds.
 - Avoid visible text in generated images unless absolutely necessary.
 """.strip()
 
@@ -324,12 +328,14 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
         slide.bullets = []
         slide.image_prompt = None
     elif slide.type == SlideType.TITLE_BULLETS.value:
+        slide.type = SlideType.TITLE_BULLETS_IMAGE.value
         slide.title = slide.title if not _looks_generic_title(slide.title) else _fallback_slide_title(presentation_title, index)
         slide.bullets = _normalize_bullets(
             slide.bullets,
-            limit=6,
-            fallback=_fallback_bullets_for_slide(slide.title or presentation_title, presentation_title, slot=index),
+            limit=5,
+            fallback=_fallback_bullets_for_slide(slide.title or presentation_title, presentation_title, variant="image", slot=index),
         )
+        slide.image_prompt = slide.image_prompt or f"Modern presentation illustration for {slide.title}"
     elif slide.type == SlideType.TITLE_BULLETS_IMAGE.value:
         slide.title = slide.title if not _looks_generic_title(slide.title) else _fallback_slide_title(presentation_title, index, variant="image")
         slide.bullets = _normalize_bullets(
@@ -377,9 +383,10 @@ def _normalize_plan(plan: GeminiPresentationPlan, slide_count: int) -> GeminiPre
         slides = [
             GeminiSlidePlan(type=SlideType.TITLE_SLIDE.value, title=plan.title, subtitle="Presentation overview"),
             GeminiSlidePlan(
-                type=SlideType.TITLE_BULLETS.value,
-                title=_fallback_slide_title(plan.title, 2),
-                bullets=_fallback_bullets_for_slide(plan.title, plan.title, slot=2),
+                type=SlideType.TITLE_BULLETS_IMAGE.value,
+                title=_fallback_slide_title(plan.title, 2, variant="image"),
+                bullets=_fallback_bullets_for_slide(plan.title, plan.title, variant="image", slot=2),
+                image_prompt=f"Modern presentation illustration for {plan.title}",
             ),
             GeminiSlidePlan(
                 type=SlideType.QUOTE.value,
@@ -395,9 +402,10 @@ def _normalize_plan(plan: GeminiPresentationPlan, slide_count: int) -> GeminiPre
     while len(slides) < slide_count:
         slides.append(
             GeminiSlidePlan(
-                type=SlideType.TITLE_BULLETS.value,
-                title=_fallback_slide_title(plan.title, len(slides) + 1),
-                bullets=_fallback_bullets_for_slide(plan.title, plan.title, slot=len(slides) + 1),
+                type=SlideType.TITLE_BULLETS_IMAGE.value,
+                title=_fallback_slide_title(plan.title, len(slides) + 1, variant="image"),
+                bullets=_fallback_bullets_for_slide(plan.title, plan.title, variant="image", slot=len(slides) + 1),
+                image_prompt=f"Modern presentation illustration for {plan.title}",
             )
         )
 
@@ -418,16 +426,10 @@ def _normalize_plan(plan: GeminiPresentationPlan, slide_count: int) -> GeminiPre
             slide.quote or "",
             slide.attribution or "",
         )
-        if signature in seen_signatures and slide.type in {
-            SlideType.TITLE_BULLETS.value,
-            SlideType.TITLE_BULLETS_IMAGE.value,
-        }:
-            if slide.type == SlideType.TITLE_BULLETS.value:
-                slide.title = _fallback_slide_title(plan.title, index)
-                slide.bullets = _fallback_bullets_for_slide(plan.title, plan.title, slot=index)
-            else:
-                slide.title = _fallback_slide_title(plan.title, index, variant="image")
-                slide.bullets = _fallback_bullets_for_slide(plan.title, plan.title, variant="image", slot=index)
+        if signature in seen_signatures and slide.type == SlideType.TITLE_BULLETS_IMAGE.value:
+            slide.title = _fallback_slide_title(plan.title, index, variant="image")
+            slide.bullets = _fallback_bullets_for_slide(plan.title, plan.title, variant="image", slot=index)
+            slide.image_prompt = slide.image_prompt or f"Modern presentation illustration for {slide.title}"
         seen_signatures.add(signature)
 
     return GeminiPresentationPlan(
@@ -467,6 +469,14 @@ def _extract_image_bytes(response: Any) -> bytes:
             parts = list(getattr(candidates[0].content, "parts", []) or [])
 
     for part in parts:
+        as_image = getattr(part, "as_image", None)
+        if callable(as_image):
+            image = as_image()
+            if image is not None:
+                buffer = BytesIO()
+                image.save(buffer, format="PNG")
+                return buffer.getvalue()
+
         inline_data = getattr(part, "inline_data", None)
         if inline_data is None:
             continue
@@ -474,7 +484,10 @@ def _extract_image_bytes(response: Any) -> bytes:
         if isinstance(data, bytes):
             return data
         if isinstance(data, str):
-            return data.encode("latin1")
+            try:
+                return base64.b64decode(data, validate=True)
+            except Exception:
+                return data.encode("latin1")
     raise GeminiImageGenerationError("Gemini did not return image bytes.")
 
 
@@ -510,11 +523,12 @@ Return JSON only.
             client.models.generate_content,
             model=settings.gemini_planning_model,
             contents=user_prompt,
-            config={
-                "response_mime_type": "application/json",
-                "response_json_schema": GEMINI_PLANNING_JSON_SCHEMA,
-                "temperature": 0.3,
-            },
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                response_json_schema=GEMINI_PLANNING_JSON_SCHEMA,
+                temperature=0.3,
+            ),
         )
     except Exception as exc:
         raise GeminiPlanningError(_provider_message(exc)) from exc
@@ -557,12 +571,16 @@ def build_image_cache_key(slide: Any, style: str) -> str:
     return digest[:24]
 
 
+def get_image_model_name() -> str:
+    return get_settings().gemini_image_model
+
+
 async def generate_slide_image(prompt: str) -> bytes:
     settings = get_settings()
     client = get_client()
     final_prompt = (
-        "Create a clean, modern, presentation-ready image for a slide deck. "
-        "Use a 16:9 composition. Avoid messy text. "
+        "Create a clean, modern, presentation-ready visual for a slide deck. "
+        "Use a 16:9 composition. Do not render visible text, labels, captions, or UI copy in the image. "
         f"Prompt: {prompt}"
     )
 
@@ -572,11 +590,14 @@ async def generate_slide_image(prompt: str) -> bytes:
         response = await asyncio.to_thread(
             client.models.generate_content,
             model=settings.gemini_image_model,
-            contents=[final_prompt],
-            config={
-                "response_modalities": ["IMAGE"],
-                "response_format": {"image": {"aspect_ratio": "16:9"}},
-            },
+            contents=final_prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["TEXT", "IMAGE"],
+                image_config=types.ImageConfig(
+                    aspect_ratio="16:9",
+                    image_size="1K",
+                ),
+            ),
         )
         return _extract_image_bytes(response)
     except GeminiImageGenerationError:
