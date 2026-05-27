@@ -1,4 +1,4 @@
-<div class="slide__content">
+<div class="slide__content {{ slide.content_classes }}">
   <h2 class="heading" style="font-size: {{ slide.heading_font_size }}px;">{{ slide.title }}</h2>
   <div class="timeline-list">
     {% for step in slide.timeline %}

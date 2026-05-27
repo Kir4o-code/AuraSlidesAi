@@ -1,4 +1,4 @@
-<div class="slide__content card">
+<div class="slide__content card {{ slide.content_classes }}">
   <h2 class="heading" style="font-size: {{ slide.heading_font_size }}px;">{{ slide.title }}</h2>
   <ul class="bullet-list">
     {% for bullet in slide.bullets %}

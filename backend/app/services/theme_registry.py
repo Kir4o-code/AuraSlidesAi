@@ -21,6 +21,15 @@ class ThemeTokens:
     shadow: str
     spacing_scale: float
     typography_scale: float
+    # New tokens
+    background_image: str | None = None
+    background_position: str = "center"
+    background_size: str = "cover"
+    base_font_size: int = 18
+    heading_scale: float = 2.4
+    body_scale: float = 1.0
+    line_height: float = 1.35
+    letter_spacing: str = "normal"
 
 
 THEME_REGISTRY: dict[str, ThemeTokens] = {
@@ -41,6 +50,14 @@ THEME_REGISTRY: dict[str, ThemeTokens] = {
         shadow="0 28px 80px rgba(15, 23, 42, 0.35)",
         spacing_scale=1.6,
         typography_scale=1.4,
+        background_image=None,
+        background_position="center",
+        background_size="cover",
+        base_font_size=20,
+        heading_scale=2.6,
+        body_scale=1.0,
+        line_height=1.28,
+        letter_spacing="normal",
     ),
     ThemeName.MODERN_LIGHT.value: ThemeTokens(
         name=ThemeName.MODERN_LIGHT.value,
@@ -59,6 +76,14 @@ THEME_REGISTRY: dict[str, ThemeTokens] = {
         shadow="0 24px 70px rgba(37, 99, 235, 0.12)",
         spacing_scale=1.4,
         typography_scale=1.2,
+        background_image=None,
+        background_position="center",
+        background_size="cover",
+        base_font_size=18,
+        heading_scale=2.4,
+        body_scale=1.0,
+        line_height=1.32,
+        letter_spacing="normal",
     ),
     ThemeName.EDITORIAL.value: ThemeTokens(
         name=ThemeName.EDITORIAL.value,
@@ -77,6 +102,14 @@ THEME_REGISTRY: dict[str, ThemeTokens] = {
         shadow="0 26px 72px rgba(120, 53, 15, 0.12)",
         spacing_scale=1.15,
         typography_scale=0.92,
+        background_image=None,
+        background_position="center",
+        background_size="cover",
+        base_font_size=18,
+        heading_scale=2.2,
+        body_scale=0.98,
+        line_height=1.36,
+        letter_spacing="normal",
     ),
     ThemeName.CORPORATE.value: ThemeTokens(
         name=ThemeName.CORPORATE.value,
@@ -95,6 +128,14 @@ THEME_REGISTRY: dict[str, ThemeTokens] = {
         shadow="0 18px 42px rgba(15, 23, 42, 0.12)",
         spacing_scale=1.05,
         typography_scale=0.88,
+        background_image=None,
+        background_position="center",
+        background_size="cover",
+        base_font_size=17,
+        heading_scale=2.2,
+        body_scale=0.98,
+        line_height=1.34,
+        letter_spacing="normal",
     ),
     ThemeName.PLAYFUL.value: ThemeTokens(
         name=ThemeName.PLAYFUL.value,
@@ -113,6 +154,14 @@ THEME_REGISTRY: dict[str, ThemeTokens] = {
         shadow="0 26px 72px rgba(219, 39, 119, 0.16)",
         spacing_scale=1.1,
         typography_scale=0.92,
+        background_image=None,
+        background_position="center",
+        background_size="cover",
+        base_font_size=18,
+        heading_scale=2.6,
+        body_scale=1.0,
+        line_height=1.3,
+        letter_spacing="normal",
     ),
 }
 
