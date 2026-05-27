@@ -73,6 +73,34 @@ function layoutFontFamily(tokens: ReturnType<typeof resolveThemeTokens>, element
   return tokens.bodyFontFamily;
 }
 
+function DeckIcon({ icon, tokens }: { icon: string; tokens: ReturnType<typeof resolveThemeTokens> }) {
+  const stroke = tokens.accentColor;
+  return (
+    <svg viewBox="0 0 48 48" className="h-full w-full" aria-hidden="true">
+      <circle cx="24" cy="24" r="22" fill={tokens.accentSoftColor} stroke={stroke} strokeWidth="2" />
+      {icon === "chart" ? (
+        <>
+          <rect x="15" y="25" width="4" height="10" rx="1" fill={stroke} />
+          <rect x="22" y="19" width="4" height="16" rx="1" fill={stroke} />
+          <rect x="29" y="14" width="4" height="21" rx="1" fill={stroke} />
+        </>
+      ) : icon === "bolt" ? (
+        <path d="M27 10 16 27h8l-3 11 12-18h-8l2-10Z" fill={stroke} />
+      ) : icon === "idea" ? (
+        <>
+          <circle cx="24" cy="21" r="8" fill={stroke} />
+          <rect x="20" y="30" width="8" height="5" rx="2" fill={stroke} />
+        </>
+      ) : (
+        <>
+          <circle cx="24" cy="24" r="10" fill="none" stroke={stroke} strokeWidth="3" />
+          <circle cx="24" cy="24" r="3" fill={stroke} />
+        </>
+      )}
+    </svg>
+  );
+}
+
 function LayoutElementRenderer({
   element,
   tokens,
@@ -98,6 +126,14 @@ function LayoutElementRenderer({
   };
 
   const content = element.content as Record<string, unknown>;
+
+  if (content.decorative_icon) {
+    return (
+      <div style={style}>
+        <DeckIcon icon={(content.icon as string | undefined) ?? "target"} tokens={tokens} />
+      </div>
+    );
+  }
 
   if (element.kind === "panel") {
     return (
@@ -169,7 +205,9 @@ function LayoutElementRenderer({
           background: `${tokens.surface}d9`,
         }}
       >
-        <span className="mt-2 h-2.5 w-2.5 flex-none rounded-full" style={{ background: tokens.accentColor }} />
+        <span className="h-12 w-12 flex-none">
+          <DeckIcon icon={(content.icon as string | undefined) ?? "target"} tokens={tokens} />
+        </span>
         <span style={{ flex: 1 }}>{element.text}</span>
       </div>
     );

@@ -23,6 +23,7 @@ export interface ResolvedImageAsset {
   image_url: string;
   author: string | null;
   license_name: string;
+  image_class?: "icon" | "diagram" | "illustration" | "photo" | null;
   width?: number | null;
   height?: number | null;
   clip_score?: number | null;
@@ -105,6 +106,7 @@ export interface PresentationSlide {
   subtitle?: string | null;
   bullets?: string[];
   image_prompt?: string | null;
+  image_class?: "icon" | "diagram" | "illustration" | "photo" | null;
   notes?: string | null;
   left_title?: string | null;
   right_title?: string | null;

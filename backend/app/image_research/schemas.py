@@ -6,7 +6,10 @@ class ImageResearchRequest(BaseModel):
     style: str | None = None
     preferred_orientation: str = "any"
     image_type: str = "any"
+    image_class: str | None = None
     max_candidates: int = Field(default=12, ge=1, le=50)
+    exclude_source_urls: list[str] = []
+    exclude_hashes: list[str] = []
 
 
 class SearchPlan(BaseModel):
@@ -16,6 +19,7 @@ class SearchPlan(BaseModel):
     bad_terms: list[str] = []
     preferred_orientation: str = "any"
     image_type: str = "any"
+    image_class: str = "photo"
 
 
 class ImageCandidate(BaseModel):
@@ -31,6 +35,10 @@ class ImageCandidate(BaseModel):
     width: int | None = None
     height: int | None = None
     tags: list[str] = []
+    categories: list[str] = []
+    page_title: str | None = None
+    factual_score: float = 0.0
+    content_hash: str | None = None
     local_temp_path: str | None = None
     clip_score: float | None = None
     final_score: float | None = None
@@ -44,8 +52,10 @@ class SelectedImage(BaseModel):
     image_url: str
     author: str | None
     license_name: str
+    image_class: str = "photo"
     width: int | None
     height: int | None
+    content_hash: str | None = None
     clip_score: float | None
     final_score: float | None
 

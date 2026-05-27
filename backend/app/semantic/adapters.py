@@ -46,9 +46,10 @@ def _short_alt_text(slide: Slide) -> str | None:
 def _slide_media(slide: Slide) -> list[SlideMediaRef]:
     media: list[SlideMediaRef] = []
     if slide.image_prompt:
+        image_class = getattr(slide.image_class, "value", slide.image_class)
         media.append(
             SlideMediaRef(
-                kind=MediaKind.IMAGE,
+                kind=MediaKind.ICON if image_class == "icon" else MediaKind.IMAGE,
                 label=slide.title or slide.id,
                 prompt=slide.image_prompt,
                 alt=_short_alt_text(slide),
@@ -59,6 +60,7 @@ def _slide_media(slide: Slide) -> list[SlideMediaRef]:
                 metadata={
                     "resolved": slide.resolved_image is not None,
                     "license_name": getattr(slide.resolved_image, "license_name", None),
+                    "image_class": image_class,
                     "width": getattr(slide.resolved_image, "width", None),
                     "height": getattr(slide.resolved_image, "height", None),
                 },
@@ -80,6 +82,7 @@ def presentation_to_document(presentation: Presentation) -> PresentationDocument
                 "subtitle": slide.subtitle,
                 "bullets": list(slide.bullets),
                 "image_prompt": slide.image_prompt,
+                "image_class": getattr(slide.image_class, "value", slide.image_class),
                 "notes": slide.notes,
                 "left_title": slide.left_title,
                 "right_title": slide.right_title,

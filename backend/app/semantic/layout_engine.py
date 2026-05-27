@@ -105,6 +105,21 @@ def _slide_media(slide) -> dict | None:
     return first.model_dump(mode="json") if hasattr(first, "model_dump") else None
 
 
+def _icon_key(text: str, index: int = 0) -> str:
+    value = text.lower()
+    if any(term in value for term in ("growth", "increase", "scale", "trend", "revenue", "market")):
+        return "chart"
+    if any(term in value for term in ("secure", "risk", "trust", "protect", "safe", "privacy")):
+        return "shield"
+    if any(term in value for term in ("fast", "speed", "automate", "launch", "instant", "quick")):
+        return "bolt"
+    if any(term in value for term in ("target", "goal", "focus", "priority", "audience")):
+        return "target"
+    if any(term in value for term in ("idea", "insight", "strategy", "learn", "discover")):
+        return "idea"
+    return ("target", "chart", "bolt", "idea")[index % 4]
+
+
 def _bullet_list_element(
     *,
     element_id: str,
@@ -135,7 +150,7 @@ def _bullet_list_element(
                 font_size=font_size,
                 line_height=TEXT_LINE_HEIGHT,
                 text=bullet,
-                content={"bullet": True, "index": index},
+                content={"bullet": True, "index": index, "icon": _icon_key(bullet, index)},
                 debug=_make_debug(bullet, width - 40, font_size, 0, 0, "bullet item"),
             )
         )
@@ -256,6 +271,9 @@ def _layout_bullets_slide(slide) -> list[LayoutElement]:
 
 
 def _layout_image_bullets_slide(slide) -> list[LayoutElement]:
+    if getattr(slide, "image_class", None) == "icon":
+        return _layout_icon_cards_slide(slide)
+
     elements: list[LayoutElement] = []
     left_x = 88
     left_width = 560
@@ -317,6 +335,50 @@ def _layout_image_bullets_slide(slide) -> list[LayoutElement]:
         )
     ]
     elements.append(_panel_element(element_id=f"{slide.id}_image_panel", region="media", x=right_x, y=image_y, width=right_width, height=image_height, children=image_children, note="image panel"))
+    return elements
+
+
+def _layout_icon_cards_slide(slide) -> list[LayoutElement]:
+    elements: list[LayoutElement] = []
+    width = _available_width()
+    title_font = 38
+    bullet_font = 19
+    y = 84
+
+    if slide.title:
+        title_height, _, _ = _text_height(slide.title, width, title_font, min_height=54)
+        elements.append(_text_element(element_id=f"{slide.id}_title", region="title", x=MARGIN_X, y=y, width=width, text=slide.title, font_size=title_font, align=Alignment.START, min_height=title_height, spacing_after=26, note="icon card title"))
+        y += title_height + 28
+
+    bullets = slide.bullets or []
+    columns = 2 if len(bullets) <= 4 else 3
+    card_width = int((width - (GRID_GAP * (columns - 1))) / columns)
+    card_height = 138
+    for index, bullet in enumerate(bullets):
+        col = index % columns
+        row = index // columns
+        x = MARGIN_X + col * (card_width + GRID_GAP)
+        card_y = y + row * (card_height + GRID_GAP)
+        text_width = card_width - 112
+        text_height, _, _ = _text_height(bullet, text_width, bullet_font, min_height=54)
+        children = [
+            LayoutElement(
+                id=f"{slide.id}_icon_{index + 1}",
+                kind=LayoutElementKind.TEXT,
+                region=f"card.{index + 1}.icon",
+                x=0,
+                y=0,
+                width=64,
+                height=64,
+                align=Alignment.CENTER,
+                wrap=False,
+                content={"icon": _icon_key(bullet, index), "decorative_icon": True},
+                debug=_make_debug("", 64, 1, note="card icon"),
+            ),
+            _text_element(element_id=f"{slide.id}_card_{index + 1}_text", region=f"card.{index + 1}.text", x=84, y=4, width=text_width, text=bullet, font_size=bullet_font, align=Alignment.START, min_height=text_height, note="card text"),
+        ]
+        elements.append(_panel_element(element_id=f"{slide.id}_card_{index + 1}", region=f"card.{index + 1}", x=x, y=card_y, width=card_width, height=card_height, children=children, note="icon card"))
+
     return elements
 
 

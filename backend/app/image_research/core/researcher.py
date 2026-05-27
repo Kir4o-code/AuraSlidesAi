@@ -1,6 +1,8 @@
 import asyncio
 from collections import Counter
+import hashlib
 import logging
+from pathlib import Path
 import re
 import time
 import uuid
@@ -10,6 +12,7 @@ import httpx
 from app.image_research.config import PUBLIC_IMAGES_PREFIX, settings
 from app.image_research.core.clip_scorer import ClipScorer
 from app.image_research.core.downloader import DownloadError, download_image
+from app.image_research.core.image_classes import get_class_profile, infer_image_class
 from app.image_research.core.license_checker import is_allowed_license, license_score
 from app.image_research.core.search_planner import SearchPlanner
 from app.image_research.core.search_planner import compact_search_query
@@ -63,18 +66,27 @@ class ImageResearcher:
                 request.max_candidates,
             )
             search_plan, plan_warnings = await self.planner.create_plan(request)
+            search_plan.image_class = infer_image_class(
+                " ".join([request.prompt, search_plan.main_query]),
+                request.image_class or search_plan.image_class or search_plan.image_type,
+            ).value
             warnings.extend(plan_warnings)
             logger.info(
                 "research.plan id=%s main=%r type=%s alternatives=%s",
                 request_id,
                 search_plan.main_query,
-                search_plan.image_type,
+                search_plan.image_class,
                 len(search_plan.alternative_queries),
             )
             candidates = await self._search(search_plan, request, warnings)
             raw_count = len(candidates)
             candidates = self._dedupe(candidates)
-            candidates = [c for c in candidates if is_allowed_license(c.license_name)]
+            excluded_sources = set(request.exclude_source_urls)
+            candidates = [
+                c for c in candidates
+                if is_allowed_license(c.license_name)
+                and (c.source_url or c.image_url) not in excluded_sources
+            ]
             logger.info("research.candidates id=%s raw=%s licensed=%s", request_id, raw_count, len(candidates))
             if not candidates:
                 warnings.append("No candidates passed license filtering.")
@@ -87,6 +99,7 @@ class ImageResearcher:
                 request_id,
                 warnings,
                 max(request.max_candidates * 2, request.max_candidates + 4),
+                set(request.exclude_hashes),
             )
             logger.info("research.downloaded id=%s downloaded=%s limit=%s", request_id, len(downloaded), download_limit)
             if not downloaded:
@@ -107,7 +120,7 @@ class ImageResearcher:
                 key=lambda c: c.final_score or 0,
                 reverse=True,
             )
-            selected_images = self._select_images(scored, request_id, prompt_slug, request.max_candidates)
+            selected_images = self._select_images(scored, request_id, prompt_slug, request.max_candidates, search_plan)
             selected = selected_images[0] if selected_images else None
             logger.info(
                 "research.done id=%s selected=%s scored=%s seconds=%.2f warnings=%s",
@@ -154,15 +167,18 @@ class ImageResearcher:
         queries = await self._expanded_queries(plan, request, warnings)
         per_page = max(8, min(request.max_candidates * 4, 30))
         task_specs = []
+        profile = get_class_profile(plan.image_class)
         for provider in self.providers:
+            provider_name = provider.__class__.__name__.replace("Provider", "").lower()
+            # Class-aware provider routing.
+            if provider_name not in profile.allowed_providers:
+                continue
             for query in queries:
-                if plan.image_type in {"diagram", "illustration", "icon"} and provider.__class__.__name__ == "PexelsProvider":
-                    continue
                 task_specs.append(
                     (
-                        provider.__class__.__name__.replace("Provider", "").lower(),
+                        provider_name,
                         query,
-                        provider.search(query, per_page, plan.preferred_orientation, plan.image_type),
+                        provider.search(query, per_page, plan.preferred_orientation, plan.image_class),
                     )
                 )
         results = await asyncio.gather(*(task for _, _, task in task_specs), return_exceptions=True)
@@ -186,42 +202,19 @@ class ImageResearcher:
     async def _expanded_queries(
         self, plan: SearchPlan, request: ImageResearchRequest, warnings: list[str]
     ) -> list[str]:
-        queries = [compact_search_query(request.prompt), plan.main_query]
-        type_queries: list[str] = []
-        if plan.image_type == "diagram":
-            type_queries.extend(
-                [
-                    f"{plan.main_query} diagram",
-                    f"{plan.main_query} labeled diagram",
-                    f"{plan.main_query} educational illustration",
-                    f"{plan.main_query} cross section",
-                ]
-            )
-        elif plan.image_type in {"illustration", "icon"}:
-            type_queries.extend([f"{plan.main_query} {plan.image_type}", f"{plan.main_query} vector"])
-        wiki_queries: list[str] = []
-        try:
-            params = {
-                "action": "opensearch",
-                "format": "json",
-                "search": plan.main_query,
-                "limit": 5,
-                "namespace": 0,
-                "origin": "*",
-            }
-            async with httpx.AsyncClient(timeout=12) as client:
-                resp = await client.get(
-                    "https://en.wikipedia.org/w/api.php",
-                    params=params,
-                    headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
-                )
-                resp.raise_for_status()
-                titles = resp.json()[1]
-            wiki_queries.extend(title for title in titles if isinstance(title, str))
-        except Exception as exc:
-            warnings.append(f"Wikipedia query expansion failed: {exc}")
+        profile = get_class_profile(plan.image_class)
+        # Class context expands generic slide prompts into provider-specific searches.
+        queries = [
+            compact_search_query(request.prompt),
+            compact_search_query(f"{request.prompt} {plan.image_class}"),
+            plan.main_query,
+        ]
+        class_queries = [f"{plan.main_query} {term}" for term in profile.query_terms]
+        synonym_queries = self._synonym_queries(plan.main_query, plan.image_class)
+        wiki_queries = await self._wikipedia_related_queries(plan.main_query, warnings)
         queries.extend(await self._multilingual_wikipedia_queries(request.prompt, warnings))
-        queries.extend(type_queries)
+        queries.extend(class_queries)
+        queries.extend(synonym_queries)
         queries.extend(wiki_queries)
         queries.extend(plan.alternative_queries)
 
@@ -234,6 +227,61 @@ class ImageResearcher:
                 seen.add(key)
                 out.append(clean)
         return out[:8]
+
+    async def _wikipedia_related_queries(self, query: str, warnings: list[str]) -> list[str]:
+        queries: list[str] = []
+        try:
+            async with httpx.AsyncClient(timeout=12) as client:
+                resp = await client.get(
+                    "https://en.wikipedia.org/w/api.php",
+                    params={
+                        "action": "opensearch",
+                        "format": "json",
+                        "search": query,
+                        "limit": 5,
+                        "namespace": 0,
+                        "origin": "*",
+                    },
+                    headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
+                )
+                resp.raise_for_status()
+                titles = [title for title in resp.json()[1] if isinstance(title, str)]
+                queries.extend(titles)
+                if titles:
+                    cat_resp = await client.get(
+                        "https://en.wikipedia.org/w/api.php",
+                        params={
+                            "action": "query",
+                            "format": "json",
+                            "titles": "|".join(titles[:3]),
+                            "prop": "categories|pageimages",
+                            "cllimit": 10,
+                            "piprop": "name|original",
+                            "origin": "*",
+                        },
+                        headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
+                    )
+                    cat_resp.raise_for_status()
+                    pages = (cat_resp.json().get("query") or {}).get("pages") or {}
+                    for page in pages.values():
+                        if page.get("title"):
+                            queries.append(str(page["title"]))
+                        for category in page.get("categories") or []:
+                            title = str(category.get("title", "")).replace("Category:", "")
+                            if not title.lower().startswith(("articles ", "cs1 ", "webarchive", "pages ")):
+                                queries.append(title)
+        except Exception as exc:
+            warnings.append(f"Wikipedia query expansion failed: {exc}")
+        return queries
+
+    def _synonym_queries(self, query: str, image_class: str) -> list[str]:
+        synonyms = {
+            "photo": ("photograph", "documentary image", "real image"),
+            "diagram": ("schema", "chart", "educational diagram", "labeled illustration"),
+            "illustration": ("drawing", "vector illustration", "educational drawing"),
+            "icon": ("symbol", "pictogram", "flat icon"),
+        }
+        return [f"{query} {term}" for term in synonyms.get(image_class, ())]
 
     async def _multilingual_wikipedia_queries(self, prompt: str, warnings: list[str]) -> list[str]:
         if prompt.isascii():
@@ -324,7 +372,7 @@ class ImageResearcher:
                 self._metadata_score(candidate, request, plan),
                 self._aspect_ratio_score(candidate, request.preferred_orientation),
                 self._resolution_score(candidate),
-                self._source_score(candidate.source),
+                self._source_score(candidate.source, plan),
             ),
             reverse=True,
         )
@@ -333,10 +381,11 @@ class ImageResearcher:
         prompts = [
             request.prompt,
             plan.main_query,
-            plan.image_type,
+            plan.image_class,
             f"{request.prompt}. {request.style or ''}".strip(),
             f"{plan.main_query}. {' '.join(plan.visual_requirements)}".strip(),
         ]
+        prompts.extend(get_class_profile(plan.image_class).clip_context)
         prompts.extend(plan.alternative_queries[:4])
         return [prompt for prompt in prompts if prompt]
 
@@ -346,9 +395,11 @@ class ImageResearcher:
         request_id: str,
         warnings: list[str],
         scoring_pool_size: int,
+        excluded_hashes: set[str],
     ) -> list[ImageCandidate]:
         downloaded: list[ImageCandidate] = []
         failures: Counter[str] = Counter()
+        seen_hashes: set[str] = set(excluded_hashes)
         wikimedia_rate_limited = False
 
         for candidate in candidates:
@@ -361,6 +412,14 @@ class ImageResearcher:
                 if candidate.source == "wikimedia":
                     await asyncio.sleep(0.9)
                 candidate.local_temp_path = await download_image(candidate.image_url, request_id)
+                # Hash de-dupe prevents repeated images across slides and providers.
+                candidate.content_hash = hashlib.sha256(Path(candidate.local_temp_path).read_bytes()).hexdigest()
+                if candidate.content_hash in seen_hashes:
+                    failures[f"{candidate.source} duplicate hash"] += 1
+                    Path(candidate.local_temp_path).unlink(missing_ok=True)
+                    candidate.local_temp_path = None
+                    continue
+                seen_hashes.add(candidate.content_hash)
                 downloaded.append(candidate)
             except DownloadError as exc:
                 failures[f"{candidate.source} HTTP {exc.status_code or 'error'}"] += 1
@@ -388,17 +447,18 @@ class ImageResearcher:
         low = min(clip_scores)
         high = max(clip_scores)
         span = high - low
+        profile = get_class_profile(plan.image_class)
         for candidate, raw in zip(candidates, clip_scores):
             normalized = 1.0 if span == 0 else (raw - low) / span
             candidate.clip_score = round(raw, 6)
             metadata = self._metadata_score(candidate, request, plan)
             candidate.final_score = round(
-                metadata * 0.42
-                + normalized * 0.27
-                + license_score(candidate.license_name) * 0.10
-                + self._source_score(candidate.source) * 0.10
-                + self._resolution_score(candidate) * 0.06
-                + self._aspect_ratio_score(candidate, request.preferred_orientation) * 0.05,
+                metadata * profile.metadata_weight
+                + normalized * profile.clip_weight
+                + license_score(candidate.license_name) * profile.license_weight
+                + self._source_score(candidate.source, plan) * profile.source_weight
+                + self._resolution_score(candidate) * profile.resolution_weight
+                + self._aspect_ratio_score(candidate, request.preferred_orientation) * profile.aspect_weight,
                 6,
             )
         return candidates
@@ -409,6 +469,7 @@ class ImageResearcher:
         request_id: str,
         prompt_slug: str,
         limit: int,
+        plan: SearchPlan,
     ) -> list[SelectedImage]:
         selected: list[SelectedImage] = []
         seen_pages: set[str] = set()
@@ -429,8 +490,10 @@ class ImageResearcher:
                     image_url=candidate.image_url,
                     author=candidate.author,
                     license_name=candidate.license_name,
+                    image_class=plan.image_class,
                     width=candidate.width,
                     height=candidate.height,
+                    content_hash=candidate.content_hash,
                     clip_score=candidate.clip_score,
                     final_score=candidate.final_score,
                 )
@@ -472,6 +535,8 @@ class ImageResearcher:
                 candidate.author or "",
                 candidate.source_url or "",
                 " ".join(candidate.tags),
+                " ".join(candidate.categories),
+                candidate.page_title or "",
             ]
         ).lower()
         core_text = " ".join(
@@ -482,12 +547,13 @@ class ImageResearcher:
             ]
         )
         visual_text = " ".join(plan.visual_requirements) if plan else ""
+        profile = get_class_profile(plan.image_class if plan else None)
         query_tokens = self._tokens(core_text)
         visual_tokens = self._tokens(visual_text)
         critical_tokens = self._critical_tokens(plan.main_query if plan else core_text)
         text_tokens = self._tokens(text)
         if not query_tokens:
-            return self._source_score(candidate.source) * 0.25
+            return self._source_score(candidate.source, plan) * 0.25
         matched = sum(1 for token in query_tokens if token in text_tokens)
         visual_matched = sum(1 for token in visual_tokens if token in text_tokens)
         critical_matched = sum(1 for token in critical_tokens if token in text_tokens)
@@ -508,7 +574,7 @@ class ImageResearcher:
             score -= 0.25
         if plan and any(term.lower() in text for term in plan.bad_terms):
             score -= 0.35
-        if plan and plan.image_type in {"diagram", "illustration", "icon"}:
+        if plan and plan.image_class in {"diagram", "illustration", "icon"}:
             educational_terms = {
                 "diagram",
                 "anatomy",
@@ -528,10 +594,16 @@ class ImageResearcher:
                 score -= 0.3
             if candidate.source == "pixabay" and not any(term in text for term in educational_terms):
                 score -= 0.16
+        if any(term.lower() in text for term in profile.query_terms):
+            score += 0.16
+        if any(term.lower() in text for term in profile.bad_terms):
+            score -= 0.25
+        if candidate.source == "wikimedia":
+            score += candidate.factual_score
         if any(term in text for term in {"reenactment", "replica", "memorial", "statue", "costume"}):
             if plan and any(term in " ".join(plan.visual_requirements).lower() for term in {"authentic", "documentary", "historical"}):
                 score -= 0.22
-        return max(0.0, min(1.0, score + self._source_score(candidate.source) * 0.15))
+        return max(0.0, min(1.0, score + self._source_score(candidate.source, plan) * 0.15))
 
     def _critical_tokens(self, value: str) -> set[str]:
         generic = {
@@ -581,13 +653,11 @@ class ImageResearcher:
             return max(0.25, 1 - min(abs(ratio - (16 / 9)) / 1.2, 1))
         return 0.9 if ratio >= 1 else 0.55
 
-    def _source_score(self, source: str) -> float:
-        return {
-            "wikimedia": 1.0,
-            "openverse": 0.98,
-            "pexels": 0.58,
-            "pixabay": 0.58,
-        }.get(source, 0.0)
+    def _source_score(self, source: str, plan: SearchPlan | None = None) -> float:
+        if plan:
+            return get_class_profile(plan.image_class).preferred_sources.get(source, 0.0)
+        return get_class_profile(None).preferred_sources.get(source, 0.0)
+
 
     def _empty(self, search_plan: SearchPlan | None, warnings: list[str]) -> ImageResearchResponse:
         return ImageResearchResponse(

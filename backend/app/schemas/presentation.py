@@ -29,6 +29,13 @@ class ImageSource(str, Enum):
     IMAGE_RESEARCH = "image_research"
 
 
+class ImageClass(str, Enum):
+    ICON = "icon"
+    DIAGRAM = "diagram"
+    ILLUSTRATION = "illustration"
+    PHOTO = "photo"
+
+
 class ResolvedImageAsset(BaseModel):
     local_path: str
     public_url: str
@@ -37,6 +44,7 @@ class ResolvedImageAsset(BaseModel):
     image_url: str
     author: str | None = None
     license_name: str
+    image_class: ImageClass | None = None
     width: int | None = None
     height: int | None = None
     clip_score: float | None = None
@@ -77,6 +85,7 @@ class Slide(BaseModel):
     text_align: TextAlign = Field(default=TextAlign.LEFT)
     columns: int = Field(default=1, ge=1, le=3)
     image_prompt: str | None = Field(default=None, max_length=500)
+    image_class: ImageClass | None = None
     notes: str | None = Field(default=None, max_length=500)
     left_title: str | None = Field(default=None, max_length=120)
     right_title: str | None = Field(default=None, max_length=120)

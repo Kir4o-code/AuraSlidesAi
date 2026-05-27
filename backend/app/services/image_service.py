@@ -4,7 +4,7 @@ from typing import Any
 
 from app.image_research.core.researcher import ImageResearcher
 from app.image_research.schemas import ImageResearchRequest, SelectedImage
-from app.schemas.presentation import ImageSource, Presentation, ResolvedImageAsset, SlideType
+from app.schemas.presentation import ImageClass, ImageSource, Presentation, ResolvedImageAsset, SlideType
 from app.services.gemini_service import (
     GeminiImageGenerationError,
     build_image_cache_key,
@@ -38,6 +38,10 @@ def _image_slides(presentation: Presentation) -> list[Any]:
             SlideType.TITLE_BULLETS_IMAGE,
             SlideType.HERO_IMAGE,
         }
+        and not (
+            getattr(slide, "type", None) == SlideType.TITLE_BULLETS_IMAGE
+            and getattr(slide, "image_class", None) == ImageClass.ICON
+        )
     ]
 
 
@@ -74,6 +78,7 @@ def _resolved_from_research_image(
         image_url=selected.image_url,
         author=selected.author,
         license_name=selected.license_name,
+        image_class=ImageClass(selected.image_class),
         width=width or selected.width,
         height=height or selected.height,
         clip_score=selected.clip_score,
@@ -100,6 +105,7 @@ async def _resolve_one_slide_image(slide: Any, style: str) -> None:
             image_url=f"/generated/optimized_images/{optimized.path.name}",
             author=None,
             license_name="AI generated",
+            image_class=getattr(slide, "image_class", None),
             width=optimized.width,
             height=optimized.height,
         )
@@ -109,7 +115,12 @@ async def _resolve_one_slide_image(slide: Any, style: str) -> None:
         raise GeminiImageGenerationError(f"{image_prompt}: {exc}") from exc
 
 
-async def _resolve_one_research_image(slide: Any, style: str) -> None:
+async def _resolve_one_research_image(
+    slide: Any,
+    style: str,
+    used_source_urls: set[str],
+    used_hashes: set[str],
+) -> None:
     prompt = _research_prompt(slide)
     if not prompt:
         return
@@ -121,7 +132,10 @@ async def _resolve_one_research_image(slide: Any, style: str) -> None:
                 style=style,
                 preferred_orientation="landscape",
                 image_type=_infer_research_image_type(prompt),
+                image_class=(getattr(slide, "image_class", None) or _infer_research_image_type(prompt)),
                 max_candidates=1,
+                exclude_source_urls=sorted(used_source_urls),
+                exclude_hashes=sorted(used_hashes),
             )
         )
         selected = response.selected_image
@@ -136,6 +150,9 @@ async def _resolve_one_research_image(slide: Any, style: str) -> None:
             optimized.width,
             optimized.height,
         )
+        used_source_urls.add(selected.source_url)
+        if selected.content_hash:
+            used_hashes.add(selected.content_hash)
         logger.info(
             "Resolved researched slide image. prompt=%s source=%s file=%s",
             prompt,
@@ -160,10 +177,16 @@ async def enrich_presentation_images(
     )
 
     failures: list[str] = []
+    used_source_urls: set[str] = set()
+    used_hashes: set[str] = set()
     for slide in image_slides:
         try:
             if image_source == ImageSource.IMAGE_RESEARCH:
-                await _resolve_one_research_image(slide, presentation.theme)
+                try:
+                    await _resolve_one_research_image(slide, presentation.theme, used_source_urls, used_hashes)
+                except ImageResearchResolutionError as exc:
+                    logger.warning("Image research fallback to Gemini. error=%s", exc)
+                    await _resolve_one_slide_image(slide, presentation.theme)
             else:
                 await _resolve_one_slide_image(slide, presentation.theme)
         except (GeminiImageGenerationError, ImageResearchResolutionError) as exc:
@@ -190,6 +213,7 @@ def build_image_context(slide: Any) -> dict[str, Any] | None:
     return {
         "query": image_prompt,
         "role": getattr(slide, "type", "hero_image"),
+        "image_class": getattr(getattr(slide, "image_class", None), "value", getattr(slide, "image_class", None)),
         "status": "resolved" if resolved else "missing",
         "src": resolved.public_url if resolved else None,
         "render_src": render_src,

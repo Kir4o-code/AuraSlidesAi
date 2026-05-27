@@ -15,6 +15,7 @@ from google.genai import types
 from pydantic import BaseModel, Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.image_research.core.image_classes import CLASS_KEYWORDS, ImageClass, infer_image_class
 from app.schemas.presentation import Presentation, Slide, SlideType, StatisticItem, ThemeName, TimelineStep
 from app.services.theme_registry import resolve_theme_name
 
@@ -68,6 +69,7 @@ class GeminiSlidePlan(BaseModel):
     subtitle: str | None = None
     bullets: list[str] = Field(default_factory=list)
     image_prompt: str | None = None
+    image_class: str | None = None
     notes: str | None = None
     left_title: str | None = None
     right_title: str | None = None
@@ -103,6 +105,7 @@ GEMINI_PLANNING_JSON_SCHEMA: dict[str, Any] = {
                     "subtitle": {"type": "string"},
                     "bullets": {"type": "array", "items": {"type": "string"}},
                     "image_prompt": {"type": "string"},
+                    "image_class": {"type": "string"},
                     "notes": {"type": "string"},
                     "left_title": {"type": "string"},
                     "right_title": {"type": "string"},
@@ -162,6 +165,11 @@ IMAGE PROMPT RULES (EXTREMELY IMPORTANT):
 - Avoid "8k", camera flex, hype words, floating icons, surreal metaphors, generic neural networks, random math symbols, and glowing abstract backgrounds.
 - Do not ask for visible text, labels, captions, UI copy, or words inside the image unless the slide truly needs a simple chart-like visual.
 - For sensitive topics, keep visuals respectful, realistic, and non-sensational.
+- For every image-backed slide, set image_class to exactly one of: photo, diagram, illustration, icon.
+- Use photo for real people, places, objects, historical/documentary topics, or editorial visuals.
+- Use diagram for explanatory structures, systems, charts, flows, anatomy, maps, and timelines.
+- Use illustration for drawn/vector educational visuals that are not strict diagrams.
+- Use icon only for simple symbolic marks.
 """.strip()
 
 
@@ -277,6 +285,16 @@ def _normalize_image_prompt(raw_prompt: str | None, title: str | None, presentat
     return prompt[:500].rstrip(" ,.")
 
 
+def _normalize_image_class(value: str | None, prompt: str | None, *, default: ImageClass = ImageClass.PHOTO) -> str:
+    explicit = (value or "").strip().lower()
+    if explicit in {item.value for item in ImageClass}:
+        return infer_image_class(prompt or "", explicit).value
+    text = (prompt or "").lower()
+    inferred = infer_image_class(text, None)
+    has_explicit_keyword = any(term in text for terms in CLASS_KEYWORDS.values() for term in terms)
+    return inferred.value if has_explicit_keyword else default.value
+
+
 def _looks_generic_title(value: str | None) -> bool:
     if not value or not value.strip():
         return True
@@ -351,6 +369,7 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
         slide.subtitle = slide.subtitle or "Presentation overview"
         slide.bullets = []
         slide.image_prompt = None
+        slide.image_class = None
     elif slide.type == SlideType.TITLE_BULLETS.value:
         slide.type = SlideType.TITLE_BULLETS_IMAGE.value
         slide.title = slide.title if not _looks_generic_title(slide.title) else _fallback_slide_title(presentation_title, index)
@@ -359,7 +378,9 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
             limit=5,
             fallback=_fallback_bullets_for_slide(slide.title or presentation_title, presentation_title, variant="image", slot=index),
         )
-        slide.image_prompt = _normalize_image_prompt(slide.image_prompt, slide.title, presentation_title)
+        raw_image_prompt = slide.image_prompt
+        slide.image_class = _normalize_image_class(slide.image_class, " ".join(filter(None, [slide.title, raw_image_prompt])), default=ImageClass.ICON)
+        slide.image_prompt = _normalize_image_prompt(raw_image_prompt, slide.title, presentation_title)
     elif slide.type == SlideType.TITLE_BULLETS_IMAGE.value:
         slide.title = slide.title if not _looks_generic_title(slide.title) else _fallback_slide_title(presentation_title, index, variant="image")
         slide.bullets = _normalize_bullets(
@@ -367,10 +388,14 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
             limit=5,
             fallback=_fallback_bullets_for_slide(slide.title or presentation_title, presentation_title, variant="image", slot=index),
         )
-        slide.image_prompt = _normalize_image_prompt(slide.image_prompt, slide.title, presentation_title)
+        raw_image_prompt = slide.image_prompt
+        slide.image_class = _normalize_image_class(slide.image_class, " ".join(filter(None, [slide.title, raw_image_prompt])), default=ImageClass.ICON)
+        slide.image_prompt = _normalize_image_prompt(raw_image_prompt, slide.title, presentation_title)
     elif slide.type == SlideType.HERO_IMAGE.value:
         slide.title = slide.title or "Visual focus"
-        slide.image_prompt = _normalize_image_prompt(slide.image_prompt, slide.title, presentation_title, slide_type=SlideType.HERO_IMAGE.value)
+        raw_image_prompt = slide.image_prompt
+        slide.image_class = _normalize_image_class(slide.image_class, " ".join(filter(None, [slide.title, raw_image_prompt])), default=ImageClass.PHOTO)
+        slide.image_prompt = _normalize_image_prompt(raw_image_prompt, slide.title, presentation_title, slide_type=SlideType.HERO_IMAGE.value)
         slide.subtitle = slide.subtitle or ""
     elif slide.type == SlideType.COMPARISON.value:
         slide.title = slide.title or "Comparison"

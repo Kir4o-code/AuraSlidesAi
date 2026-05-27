@@ -123,6 +123,7 @@ class Slide(BaseModel):
     subtitle: str | None = Field(default=None, max_length=220)
     bullets: list[str] = Field(default_factory=list, max_length=12)
     image_prompt: str | None = Field(default=None, max_length=500)
+    image_class: str | None = Field(default=None, max_length=40)
     notes: str | None = Field(default=None, max_length=500)
     left_title: str | None = Field(default=None, max_length=120)
     right_title: str | None = Field(default=None, max_length=120)

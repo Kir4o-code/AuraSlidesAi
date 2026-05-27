@@ -46,10 +46,11 @@ async def generate_presentation_route(
         settings = get_settings()
         if settings.enable_image_generation:
             logger.info(
-                "[%s] Starting Gemini image generation for image-backed slides.",
+                "[%s] Starting image enrichment for image-backed slides. source=%s",
                 request_id,
+                payload.image_source,
             )
-            presentation = await enrich_presentation_images(presentation)
+            presentation = await enrich_presentation_images(presentation, payload.image_source)
         else:
             logger.info(
                 "[%s] Image generation disabled by env. Prompts will still render in slide layouts.",

@@ -36,10 +36,11 @@ class WikimediaProvider(BaseImageProvider):
             "gsrsearch": query,
             "gsrnamespace": 6,
             "gsrlimit": min(max(per_page, 5), 50),
-            "prop": "imageinfo|info",
+            "prop": "imageinfo|info|categories",
             "inprop": "url",
             "iiprop": "url|size|mime|extmetadata",
             "iiurlwidth": 1024,
+            "cllimit": 20,
             "origin": "*",
         }
         async with httpx.AsyncClient(timeout=25) as client:
@@ -65,6 +66,20 @@ class WikimediaProvider(BaseImageProvider):
             description = _plain((meta.get("ImageDescription") or {}).get("value"))
             author = _plain((meta.get("Artist") or {}).get("value"))
             license_name = _license((meta.get("LicenseShortName") or {}).get("value"))
+            # Wikimedia specialization: categories/titles boost factual educational assets.
+            categories = [
+                str(category.get("title", "")).replace("Category:", "")
+                for category in page.get("categories") or []
+                if category.get("title")
+            ]
+            factual_text = " ".join([title, description or "", *categories]).lower()
+            factual_score = 0.0
+            if any(term in factual_text for term in ("diagrams", "svg diagrams", "maps", "anatomy", "scientific")):
+                factual_score += 0.25
+            if any(term in factual_text for term in ("photographs", "historical images", "public domain")):
+                factual_score += 0.2
+            if any(term in factual_text for term in ("reenactment", "replica", "fictional", "cosplay", "memorial")):
+                factual_score -= 0.35
             out.append(
                 ImageCandidate(
                     id=f"wikimedia-{page.get('pageid')}",
@@ -78,7 +93,10 @@ class WikimediaProvider(BaseImageProvider):
                     license_url=(meta.get("LicenseUrl") or {}).get("value"),
                     width=info.get("thumbwidth") or info.get("width"),
                     height=info.get("thumbheight") or info.get("height"),
-                    tags=[title, description or ""],
+                    tags=[title, description or "", *categories],
+                    categories=categories,
+                    page_title=title,
+                    factual_score=factual_score,
                 )
             )
         return out

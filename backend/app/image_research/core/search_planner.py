@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 from app.image_research.config import settings
+from app.image_research.core.image_classes import get_class_profile, infer_image_class
 from app.image_research.schemas import ImageResearchRequest, SearchPlan
 
 
@@ -89,11 +90,15 @@ class SearchPlanner:
         from groq import AsyncGroq
 
         client = AsyncGroq(api_key=self.api_key)
+        image_class = infer_image_class(request.prompt, request.image_class or request.image_type)
+        profile = get_class_profile(image_class)
         prompt = {
             "user_prompt": request.prompt,
             "style": request.style,
             "preferred_orientation": request.preferred_orientation,
             "requested_image_type": request.image_type,
+            "image_class": image_class.value,
+            "class_terms": list(profile.query_terms),
         }
         response = await client.chat.completions.create(
             model=self.model,
@@ -105,9 +110,10 @@ class SearchPlanner:
                         "Create a generic image search strategy. Return strict JSON only. "
                         "Do not choose images. Do not judge copyright. Include keys: "
                         "main_query, alternative_queries, visual_requirements, bad_terms, "
-                        "preferred_orientation, image_type. Orientation must be one of "
+                        "preferred_orientation, image_type, image_class. Orientation must be one of "
                         "any, landscape, portrait, square. image_type must be one of "
-                        "photo, illustration, icon, diagram, any. alternative_queries, "
+                        "photo, illustration, icon, diagram, any. image_class must be one of "
+                        "photo, illustration, icon, diagram. alternative_queries, "
                         "visual_requirements, and bad_terms must always be JSON arrays of strings. "
                         "For exact people, places, events, artifacts, or historical topics, prefer "
                         "specific factual search terms over vague stock-photo wording. bad_terms "
@@ -132,6 +138,7 @@ class SearchPlanner:
         if plan.preferred_orientation not in VALID_ORIENTATIONS:
             plan.preferred_orientation = request.preferred_orientation
         plan.image_type = canonical_image_type(plan.image_type)
+        plan.image_class = infer_image_class(plan.main_query, plan.image_class or plan.image_type).value
         return plan
 
     def _normalize(self, data: dict[str, Any], request: ImageResearchRequest) -> dict[str, Any]:
@@ -147,33 +154,44 @@ class SearchPlanner:
                 return [part.strip() for part in value.replace(";", ",").split(",") if part.strip()]
             return [text(value)] if text(value) else []
 
+        image_class = infer_image_class(
+            " ".join([request.prompt, text(data.get("main_query"), ""), text(data.get("image_class"), "")]),
+            text(data.get("image_class"), request.image_class or request.image_type or "any"),
+        )
+        profile = get_class_profile(image_class)
+        bad_terms = [*texts(data.get("bad_terms")), *profile.bad_terms]
+        visual_requirements = [*texts(data.get("visual_requirements")), *profile.clip_context]
         return {
             "main_query": text(data.get("main_query"), request.prompt) or request.prompt,
             "alternative_queries": texts(data.get("alternative_queries")),
-            "visual_requirements": texts(data.get("visual_requirements")),
-            "bad_terms": texts(data.get("bad_terms")),
+            "visual_requirements": visual_requirements,
+            "bad_terms": bad_terms,
             "preferred_orientation": text(
                 data.get("preferred_orientation"), request.preferred_orientation
             ),
             "image_type": canonical_image_type(text(data.get("image_type"), request.image_type or "any")),
+            "image_class": image_class.value,
         }
 
     def _fallback(self, request: ImageResearchRequest) -> SearchPlan:
         style = request.style or ""
         query = compact_search_query(request.prompt)
+        image_class = infer_image_class(request.prompt, request.image_class or request.image_type)
+        profile = get_class_profile(image_class)
         return SearchPlan(
             main_query=query,
             alternative_queries=[
                 f"{query} {style}".strip(),
-                f"{query} photograph".strip(),
+                *[f"{query} {term}".strip() for term in profile.query_terms[:3]],
                 f"{query} Wikimedia Commons",
-                f"{query} stock photo",
             ],
             visual_requirements=[
                 "The image should clearly match the user prompt",
                 "The image should be visually clean and usable",
+                *profile.clip_context,
             ],
-            bad_terms=[],
+            bad_terms=list(profile.bad_terms),
             preferred_orientation=request.preferred_orientation,
             image_type=canonical_image_type(request.image_type),
+            image_class=image_class.value,
         )
