@@ -1,0 +1,50 @@
+import type { PresentationDocument } from "@/lib/semantic";
+
+export const EXAMPLE_PRESENTATION_DOCUMENT: PresentationDocument = {
+  title: "Understanding Change",
+  version: "1.0.0",
+  metadata: {
+    purpose: "Example semantic presentation document",
+    theme_name: "modern_dark",
+  },
+  slides: [
+    {
+      id: "slide_1",
+      order: 1,
+      layoutName: "title.centered",
+      title: "Understanding Change",
+      subtitle: "Rates of change, accumulation, and how the two connect.",
+      bullets: [],
+      leftBullets: [],
+      rightBullets: [],
+      timeline: [],
+      statistics: [],
+      media: [],
+    },
+    {
+      id: "slide_2",
+      order: 2,
+      layoutName: "content.bullets",
+      title: "Differentiation",
+      bullets: ["Rates of change", "Slope and local behavior", "Immediate direction of a function"],
+      leftBullets: [],
+      rightBullets: [],
+      timeline: [],
+      statistics: [],
+      media: [],
+    },
+    {
+      id: "slide_3",
+      order: 3,
+      layoutName: "quote.centered",
+      bullets: [],
+      leftBullets: [],
+      rightBullets: [],
+      timeline: [],
+      statistics: [],
+      quote: "The derivative tells you how fast the story is changing.",
+      attribution: "AuraSlides AI",
+      media: [],
+    },
+  ],
+};

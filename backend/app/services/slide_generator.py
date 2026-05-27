@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -7,8 +8,11 @@ from uuid import uuid4
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.schemas.presentation import Presentation
+from app.semantic.adapters import build_layout_specs, build_renderer_context, build_theme_definition, presentation_to_document
+from app.semantic.contracts import LayoutedPresentationDocument, RendererTarget, ThemeDefinition
+from app.semantic.layout_engine import build_layouted_presentation
+from app.semantic.validators import validate_layout_spec, validate_presentation_document, validate_renderer_context, validate_theme_definition
 from app.services.image_service import build_image_context
-from app.services.react_exporter import build_react_presentation_exports
 from app.services.theme_registry import get_theme_tokens
 
 
@@ -26,6 +30,27 @@ env = Environment(
     loader=FileSystemLoader(TEMPLATES_DIR),
     autoescape=select_autoescape(["html", "xml"]),
 )
+
+
+def prepare_export_bundle(presentation: Presentation) -> tuple[LayoutedPresentationDocument, ThemeDefinition]:
+    exporter_type = os.getenv("EXPORTER_TYPE", "native")
+    renderer_target = RendererTarget.SCREENSHOT if exporter_type == "screenshot" else RendererTarget.PPTX
+
+    semantic_document = presentation_to_document(presentation)
+    semantic_theme = build_theme_definition(presentation.theme)
+    semantic_context = build_renderer_context(renderer_target)
+    layouted_document = build_layouted_presentation(
+        semantic_document,
+        debug_mode=os.getenv("LAYOUT_DEBUG", "false").lower() in {"1", "true", "yes", "on"},
+    )
+
+    validate_presentation_document(semantic_document)
+    validate_theme_definition(semantic_theme)
+    validate_renderer_context(semantic_context)
+    for layout_spec in build_layout_specs(semantic_document):
+        validate_layout_spec(layout_spec)
+
+    return layouted_document, semantic_theme
 
 
 def _hex_to_rgb(value: str) -> tuple[int, int, int]:
@@ -148,11 +173,17 @@ def build_slide_context(presentation: Presentation) -> list[dict[str, Any]]:
         data = slide.model_dump(mode="json")
         logger.info("Preparing slide context. type=%s title=%s", data["type"], data["title"])
         data.update(_slide_text_sizes(data))
+        # Build classes for content alignment and columns
+        align = data.get("text_align") or "left"
+        cols = int(data.get("columns") or 1)
+        content_classes = f"slide__content--align-{align} columns-{cols}"
+
         slides.append(
             {
                 **data,
                 "template_name": f"{data['type']}.html",
                 "image_asset": build_image_context(slide),
+                "content_classes": content_classes,
             }
         )
     return slides
@@ -177,10 +208,16 @@ def render_presentation_html(presentation: Presentation) -> str:
     return html
 
 
+from app.services.exporters import build_presentation_exports as run_exporters
+
+
 def build_presentation_exports(presentation: Presentation) -> tuple[str, str]:
     asset_id = uuid4().hex
-    logger.info("Starting React-first PPTX and PDF build. asset_id=%s", asset_id)
-    return build_react_presentation_exports(presentation, asset_id)
+    exporter_type = os.getenv("EXPORTER_TYPE", "native")
+    layouted_document, semantic_theme = prepare_export_bundle(presentation)
+
+    logger.info("Starting presentation export. asset_id=%s exporter=%s", asset_id, exporter_type)
+    return run_exporters(layouted_document, semantic_theme, asset_id, exporter_type=exporter_type)
 
 
 def build_pdf(presentation: Presentation) -> str:

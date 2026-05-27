@@ -31,6 +31,7 @@ class GeminiSettings(BaseSettings):
     gemini_api_key: str
     gemini_planning_model: str = "gemini-2.5-flash"
     gemini_image_model: str = "gemini-2.5-flash-image"
+    enable_image_generation: bool = Field(default=True, validation_alias="IMAGE_GEN_SWITCH")
 
 
 class GeminiServiceError(Exception):
@@ -229,6 +230,13 @@ def _trim_text(value: str | None, limit: int) -> str | None:
     return cleaned[:limit]
 
 
+def _normalize_attribution(value: str | None, presentation_title: str | None, *, limit: int = 250) -> str | None:
+    normalized = _trim_text(value, limit)
+    if normalized:
+        return normalized
+    return _trim_text(presentation_title, limit)
+
+
 def _fallback_image_prompt(title: str | None, presentation_title: str, *, slide_type: str = "supporting") -> str:
     topic = title or presentation_title or "the slide topic"
     if slide_type == SlideType.HERO_IMAGE.value:
@@ -387,7 +395,8 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
     elif slide.type == SlideType.QUOTE.value:
         slide.title = _trim_text(slide.title, 140) or "Closing thought"
         slide.quote = _trim_text(slide.quote, 260) or "Keep the message focused and repeat the core idea."
-        slide.attribution = _trim_text(slide.attribution, 140) or _trim_text(presentation_title, 140)
+
+    slide.attribution = _normalize_attribution(slide.attribution, presentation_title)
 
     return slide
 

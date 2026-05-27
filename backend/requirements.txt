@@ -9,3 +9,4 @@ weasyprint==66.0
 xhtml2pdf==0.2.17
 pillow==11.2.1
 python-pptx==1.0.2
+httpx==0.24.1

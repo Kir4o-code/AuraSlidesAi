@@ -136,7 +136,7 @@ export function PresentationPreview({
       </div>
 
       <div className="mt-6 rounded-[30px] border border-slate-200 bg-slate-50 p-4">
-        <SlideDeck presentation={result.presentation} />
+        <SlideDeck presentation={result.presentation} layoutedPresentation={result.layouted_presentation ?? null} />
       </div>
     </div>
   );

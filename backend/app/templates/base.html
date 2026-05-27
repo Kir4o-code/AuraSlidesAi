@@ -5,76 +5,106 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{ presentation.title }}</title>
     <style>
+      :root {
+        --bg-start: {{ theme_tokens.bg_start }};
+        --bg-end: {{ theme_tokens.bg_end }};
+        --panel: {{ theme_tokens.panel }};
+        --text: {{ theme_tokens.text }};
+        --muted: {{ theme_tokens.muted }};
+        --accent: {{ theme_tokens.accent }};
+        --accent-strong: {{ theme_tokens.accent_strong }};
+        --accent-soft: {{ theme_tokens.accent_soft }};
+        --border: {{ theme_tokens.border }};
+        --accent-rgb: {{ theme_tokens.accent_rgb }};
+        --font-display: '{{ theme_tokens.font }}', 'Segoe UI', sans-serif;
+        --font-heading: {{ theme_tokens.heading_font_family | tojson }};
+        --font-body: {{ theme_tokens.body_font_family | tojson }};
+        --base-font-size: {{ theme_tokens.base_font_size }}px;
+        --heading-scale: {{ theme_tokens.heading_scale }};
+        --body-scale: {{ theme_tokens.body_scale }};
+        --line-height: {{ theme_tokens.line_height }};
+        --spacing-scale: {{ theme_tokens.spacing_scale }};
+      }
+
       body {
         margin: 0;
-        font-family: '{{ theme_tokens.font }}', 'Segoe UI', sans-serif;
-        color: {{ theme_tokens.text }};
-        background: linear-gradient(180deg, {{ theme_tokens.bg_start }} 0%, {{ theme_tokens.bg_end }} 100%);
+        font-family: var(--font-body);
+        font-size: var(--base-font-size);
+        line-height: var(--line-height);
+        color: var(--text);
+        background: linear-gradient(180deg, var(--bg-start) 0%, var(--bg-end) 100%);
+        background-position: {{ theme_tokens.background_position }};
+        background-size: {{ theme_tokens.background_size }};
       }
 
       .slide {
         background:
-          radial-gradient(circle at top right, rgba({{ theme_tokens.accent_rgb }}, 0.22), transparent 34%),
-          radial-gradient(circle at bottom left, rgba({{ theme_tokens.accent_rgb }}, 0.12), transparent 28%),
-          linear-gradient(145deg, {{ theme_tokens.bg_start }} 0%, {{ theme_tokens.bg_end }} 100%);
+          radial-gradient(circle at top right, rgba(var(--accent-rgb), 0.22), transparent 34%),
+          radial-gradient(circle at bottom left, rgba(var(--accent-rgb), 0.12), transparent 28%),
+          linear-gradient(145deg, var(--bg-start) 0%, var(--bg-end) 100%);
+        padding: calc(24px * var(--spacing-scale));
       }
 
       .slide__theme-bar {
-        background: linear-gradient(180deg, {{ theme_tokens.accent }}, {{ theme_tokens.accent_strong }});
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
       }
 
-      .slide__glow--one {
-        background: rgba({{ theme_tokens.accent_rgb }}, 0.18);
-      }
+      .slide__glow--one { background: rgba(var(--accent-rgb), 0.18); }
+      .slide__glow--two { background: rgba(var(--accent-rgb), 0.1); }
 
-      .slide__glow--two {
-        background: rgba({{ theme_tokens.accent_rgb }}, 0.1);
-      }
+      .eyebrow, .section-label { color: var(--accent); }
 
-      .eyebrow,
-      .section-label {
-        color: {{ theme_tokens.accent }};
-      }
+      .title, .heading, .bullet-list li, .image-card__query, .hero-image-placeholder__query,
+      .timeline-item__title, .stat-card__value, .quote-block__text { color: var(--text); }
 
-      .title,
-      .heading,
-      .bullet-list li,
-      .image-card__query,
-      .hero-image-placeholder__query,
-      .timeline-item__title,
-      .stat-card__value,
-      .quote-block__text {
-        color: {{ theme_tokens.text }};
-      }
+      .subtitle, .image-card__meta, .caption, .closing, .timeline-item__detail,
+      .stat-card__detail, .quote-block__attribution { color: var(--muted); }
 
-      .subtitle,
-      .image-card__meta,
-      .caption,
-      .closing,
-      .timeline-item__detail,
-      .stat-card__detail,
-      .quote-block__attribution {
-        color: {{ theme_tokens.muted }};
-      }
-
-      .image-card,
-      .hero-image-placeholder,
-      .comparison-card,
-      .stat-card,
-      .quote-block {
-        border-color: {{ theme_tokens.border }};
-        background: {{ theme_tokens.panel }};
+      .image-card, .hero-image-placeholder, .comparison-card, .stat-card, .quote-block {
+        border-color: var(--border);
+        background: var(--panel);
         box-shadow: {{ theme_tokens.shadow }};
       }
 
-      .image-card__badge,
-      .hero-image-placeholder__role {
-        background: {{ theme_tokens.panel }};
-        color: {{ theme_tokens.accent }};
+      .image-card__badge, .hero-image-placeholder__role { background: var(--panel); color: var(--accent); }
+
+      .comparison-card--accent { background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.09), var(--panel)); }
+
+      /* Content layout helpers */
+      .slide__content {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: calc(28px * var(--spacing-scale));
+        display: flex;
+        flex-direction: column;
+        gap: calc(12px * var(--spacing-scale));
       }
 
-      .comparison-card--accent {
-        background: linear-gradient(180deg, rgba({{ theme_tokens.accent_rgb }}, 0.09), {{ theme_tokens.panel }});
+      .slide__content--align-left { text-align: left; align-items: flex-start; }
+      .slide__content--align-center { text-align: center; align-items: center; }
+      .slide__content--align-right { text-align: right; align-items: flex-end; }
+
+      /* Multi-column helpers applied to common text blocks */
+      .columns-2 .title,
+      .columns-2 .subtitle,
+      .columns-2 .caption,
+      .columns-2 .bullet-list {
+        column-count: 2;
+        column-gap: 36px;
+      }
+
+      .columns-3 .title,
+      .columns-3 .subtitle,
+      .columns-3 .caption,
+      .columns-3 .bullet-list {
+        column-count: 3;
+        column-gap: 32px;
+      }
+
+      /* Responsive adjustments */
+      @media (max-width: 900px) {
+        .columns-2 .title, .columns-3 .title { column-count: 1; }
+        .slide__content { padding: calc(18px * var(--spacing-scale)); }
       }
     </style>
   </head>

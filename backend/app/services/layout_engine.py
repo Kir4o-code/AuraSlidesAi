@@ -11,6 +11,7 @@ from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.util import Inches, Pt
 
 from app.schemas.presentation import Presentation, Slide, SlideType
+from app.semantic.contracts import Alignment
 from app.services.image_optimizer import optimize_image_file
 from app.services.theme_registry import ThemeTokens, get_theme_tokens
 
@@ -330,5 +331,136 @@ def build_pptx_presentation(presentation: Presentation) -> PptxPresentation:
         renderer = SLIDE_RENDERERS.get(slide.type)
         if renderer is not None:
             renderer(pptx, slide, tokens)
+
+    return pptx
+
+
+from app.semantic.contracts import LayoutElement, LayoutElementKind, LayoutedPresentationDocument, ThemeDefinition
+
+
+PX_TO_INCH = 1.0 / 96.0
+
+
+def _px(value: int) -> float:
+    return value * PX_TO_INCH
+
+
+def _semantic_font_name(theme: ThemeDefinition, region: str, kind: LayoutElementKind) -> str:
+    if kind in {LayoutElementKind.QUOTE, LayoutElementKind.STATISTIC}:
+        return theme.tokens.fonts.heading or theme.tokens.fonts.body
+    if region in {"title", "quote", "attribution"}:
+        return theme.tokens.fonts.heading or theme.tokens.fonts.body
+    return theme.tokens.fonts.body or theme.tokens.fonts.heading
+
+
+def _render_debug_label(slide, element: LayoutElement, left: float, top: float, theme: ThemeDefinition) -> None:
+    box = slide.shapes.add_textbox(Inches(_px(left + 4)), Inches(_px(top + 4)), Inches(max(_px(min(element.width, 200)), 0.4)), Inches(0.22))
+    frame = box.text_frame
+    frame.clear()
+    run = frame.paragraphs[0].add_run()
+    run.text = f"{element.region} · {element.x},{element.y} {element.width}x{element.height}"
+    run.font.name = theme.tokens.fonts.mono or theme.tokens.fonts.body
+    run.font.size = Pt(7)
+    run.font.color.rgb = _rgb(theme.tokens.accent_primary)
+
+
+def _render_layout_element(slide, element: LayoutElement, theme: ThemeDefinition, *, offset_x: int = 0, offset_y: int = 0, debug_mode: bool = False) -> None:
+    left = offset_x + element.x
+    top = offset_y + element.y
+    width = element.width
+    height = element.height
+
+    if element.kind == LayoutElementKind.PANEL:
+        panel = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
+        panel.fill.solid()
+        panel.fill.fore_color.rgb = _rgb(theme.tokens.surface)
+        panel.line.color.rgb = _rgb(theme.tokens.border)
+        panel.line.width = Pt(1)
+    elif element.kind == LayoutElementKind.IMAGE:
+        local_path = element.content.get("local_path") if isinstance(element.content, dict) else None
+        public_url = element.content.get("src") if isinstance(element.content, dict) else None
+        image_path = Path(local_path) if local_path else None
+        if image_path and image_path.exists():
+            slide.shapes.add_picture(str(image_path), Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
+        else:
+            placeholder = slide.shapes.add_textbox(Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
+            frame = placeholder.text_frame
+            frame.word_wrap = True
+            frame.clear()
+            run = frame.paragraphs[0].add_run()
+            run.text = element.content.get("prompt") or element.text or "Image"
+            run.font.name = theme.tokens.fonts.body
+            run.font.size = Pt(max(10, (element.font_size or 18) * 0.7))
+            run.font.color.rgb = _rgb(theme.tokens.text_primary)
+            placeholder.fill.solid()
+            placeholder.fill.fore_color.rgb = _rgb(theme.tokens.background_alt)
+            placeholder.line.color.rgb = _rgb(theme.tokens.border)
+    else:
+        textbox = slide.shapes.add_textbox(Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
+        frame = textbox.text_frame
+        frame.word_wrap = element.wrap
+        frame.clear()
+        frame.margin_left = Inches(0.02)
+        frame.margin_right = Inches(0.02)
+        frame.margin_top = Inches(0.02)
+        frame.margin_bottom = Inches(0.02)
+        paragraph = frame.paragraphs[0]
+        paragraph.alignment = {
+            Alignment.START: PP_ALIGN.LEFT,
+            Alignment.CENTER: PP_ALIGN.CENTER,
+            Alignment.END: PP_ALIGN.RIGHT,
+        }[element.align]
+        run = paragraph.add_run()
+        if element.kind == LayoutElementKind.BULLET_ITEM:
+            run.text = f"• {element.text or ''}"
+        else:
+            run.text = element.text or ""
+        run.font.name = _semantic_font_name(theme, element.region, element.kind)
+        if element.font_size:
+            run.font.size = Pt(element.font_size)
+        run.font.color.rgb = _rgb(theme.tokens.text_primary)
+
+    if debug_mode:
+        debug_box = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
+        debug_box.fill.background()
+        debug_box.line.color.rgb = _rgb(theme.tokens.accent_primary)
+        debug_box.line.width = Pt(1)
+        _render_debug_label(slide, element, left, top, theme)
+
+    for child in element.children:
+        _render_layout_element(slide, child, theme, offset_x=left, offset_y=top, debug_mode=debug_mode)
+
+
+def _render_layout_slide(prs: PptxPresentation, slide_data: LayoutedSlide, theme: ThemeDefinition) -> None:
+    page = prs.slides.add_slide(prs.slide_layouts[BLANK_LAYOUT_INDEX])
+    page.background.fill.solid()
+    page.background.fill.fore_color.rgb = _rgb(theme.tokens.background)
+
+    background = page.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), SLIDE_WIDTH, SLIDE_HEIGHT)
+    background.fill.gradient()
+    background.fill.gradient_angle = 135
+    stops = background.fill.gradient_stops
+    stops[0].position = 0.0
+    stops[0].color.rgb = _rgb(theme.tokens.background)
+    stops[1].position = 1.0
+    stops[1].color.rgb = _rgb(theme.tokens.background_alt)
+    background.line.fill.background()
+
+    accent = page.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(0.12), SLIDE_HEIGHT)
+    accent.fill.solid()
+    accent.fill.fore_color.rgb = _rgb(theme.tokens.accent_primary)
+    accent.line.fill.background()
+
+    for element in slide_data.elements:
+        _render_layout_element(page, element, theme, debug_mode=slide_data.debug_mode)
+
+
+def build_pptx_presentation(layouted_presentation: LayoutedPresentationDocument, theme: ThemeDefinition) -> PptxPresentation:
+    pptx = PptxPresentation()
+    pptx.slide_width = SLIDE_WIDTH
+    pptx.slide_height = SLIDE_HEIGHT
+
+    for slide in layouted_presentation.slides:
+        _render_layout_slide(pptx, slide, theme)
 
     return pptx

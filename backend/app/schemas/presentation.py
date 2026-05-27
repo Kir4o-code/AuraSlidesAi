@@ -2,6 +2,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.semantic.contracts import LayoutedPresentationDocument
+
 
 class SlideType(str, Enum):
     TITLE_SLIDE = "title_slide"
@@ -61,6 +63,14 @@ class Slide(BaseModel):
     title: str | None = Field(default=None, max_length=140)
     subtitle: str | None = Field(default=None, max_length=220)
     bullets: list[str] = Field(default_factory=list, max_length=6)
+    # layout helpers
+    class TextAlign(str, Enum):
+        LEFT = "left"
+        CENTER = "center"
+        RIGHT = "right"
+
+    text_align: TextAlign = Field(default=TextAlign.LEFT)
+    columns: int = Field(default=1, ge=1, le=3)
     image_prompt: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=500)
     left_title: str | None = Field(default=None, max_length=120)
@@ -122,5 +132,6 @@ class GeneratePresentationRequest(BaseModel):
 
 class GeneratePresentationResponse(BaseModel):
     presentation: Presentation
+    layouted_presentation: LayoutedPresentationDocument | None = None
     pptx_url: str
     pdf_url: str

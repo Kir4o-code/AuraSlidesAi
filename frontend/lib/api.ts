@@ -40,6 +40,64 @@ export interface StatisticItem {
   detail?: string | null;
 }
 
+export type LayoutElementKind =
+  | "text"
+  | "image"
+  | "panel"
+  | "bullet_list"
+  | "bullet_item"
+  | "card"
+  | "timeline_step"
+  | "statistic"
+  | "quote";
+
+export type LayoutAlignment = "start" | "center" | "end";
+
+export interface LayoutDebugInfo {
+  content_length: number;
+  estimated_lines: number;
+  estimated_chars_per_line: number;
+  spacing_before: number;
+  spacing_after: number;
+  note?: string | null;
+}
+
+export interface LayoutElement {
+  id: string;
+  kind: LayoutElementKind;
+  region: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  align: LayoutAlignment;
+  wrap: boolean;
+  font_size?: number | null;
+  line_height?: number | null;
+  z_index: number;
+  text?: string | null;
+  content: Record<string, unknown>;
+  children: LayoutElement[];
+  debug?: LayoutDebugInfo | null;
+}
+
+export interface LayoutedSlide {
+  slide_id: string;
+  layout_name: string;
+  canvas_width: number;
+  canvas_height: number;
+  elements: LayoutElement[];
+  debug_mode: boolean;
+  debug: Record<string, unknown>;
+}
+
+export interface LayoutedPresentationDocument {
+  title: string;
+  version: string;
+  metadata: Record<string, unknown>;
+  slides: LayoutedSlide[];
+}
+
 export interface PresentationSlide {
   id: string;
   type: SlideType;
@@ -73,6 +131,7 @@ export interface GeneratePresentationPayload {
 
 export interface GeneratePresentationResponse {
   presentation: Presentation;
+  layouted_presentation?: LayoutedPresentationDocument | null;
   pptx_url: string;
   pdf_url: string;
 }

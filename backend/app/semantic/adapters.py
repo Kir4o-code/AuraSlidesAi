@@ -1,0 +1,155 @@
+from __future__ import annotations
+
+from typing import Iterable
+
+from app.schemas.presentation import Presentation, Slide, SlideType
+from app.semantic.catalog import LAYOUT_SPEC_REGISTRY, get_layout_spec
+from app.semantic.contracts import (
+    LayoutSpec,
+    MediaKind,
+    PresentationDocument,
+    RendererContext,
+    RendererTarget,
+    SlideMediaRef,
+    ThemeDefinition,
+    ThemeFonts,
+    ThemeTokens,
+)
+from app.services.theme_registry import get_theme_tokens
+
+
+SLIDE_LAYOUT_MAP: dict[SlideType, str] = {
+    SlideType.TITLE_SLIDE: "title.centered",
+    SlideType.TITLE_BULLETS: "content.bullets",
+    SlideType.TITLE_BULLETS_IMAGE: "content.image_split",
+    SlideType.HERO_IMAGE: "hero.focus",
+    SlideType.COMPARISON: "comparison.split",
+    SlideType.TIMELINE: "timeline.stacked",
+    SlideType.STATISTICS: "statistics.grid",
+    SlideType.QUOTE: "quote.centered",
+}
+
+
+def _short_alt_text(slide: Slide) -> str | None:
+    if slide.title:
+        return slide.title[:120]
+    if not slide.image_prompt:
+        return None
+
+    cleaned = slide.image_prompt.strip()
+    if len(cleaned) <= 220:
+        return cleaned
+
+    return f"{cleaned[:217].rstrip()}..."
+
+
+def _slide_media(slide: Slide) -> list[SlideMediaRef]:
+    media: list[SlideMediaRef] = []
+    if slide.image_prompt:
+        media.append(
+            SlideMediaRef(
+                kind=MediaKind.IMAGE,
+                label=slide.title or slide.id,
+                prompt=slide.image_prompt,
+                alt=_short_alt_text(slide),
+                source=getattr(slide.resolved_image, "source", None),
+                source_url=getattr(slide.resolved_image, "source_url", None),
+                local_path=getattr(slide.resolved_image, "local_path", None),
+                public_url=getattr(slide.resolved_image, "public_url", None),
+                metadata={
+                    "resolved": slide.resolved_image is not None,
+                    "license_name": getattr(slide.resolved_image, "license_name", None),
+                    "width": getattr(slide.resolved_image, "width", None),
+                    "height": getattr(slide.resolved_image, "height", None),
+                },
+            )
+        )
+    return media
+
+
+def presentation_to_document(presentation: Presentation) -> PresentationDocument:
+    semantic_slides = []
+    for index, slide in enumerate(presentation.slides, start=1):
+        layout_name = SLIDE_LAYOUT_MAP.get(slide.type, "content.bullets")
+        semantic_slides.append(
+            {
+                "id": slide.id,
+                "order": index,
+                "layout_name": layout_name,
+                "title": slide.title,
+                "subtitle": slide.subtitle,
+                "bullets": list(slide.bullets),
+                "image_prompt": slide.image_prompt,
+                "notes": slide.notes,
+                "left_title": slide.left_title,
+                "right_title": slide.right_title,
+                "left_bullets": list(slide.left_bullets),
+                "right_bullets": list(slide.right_bullets),
+                "timeline": [step.model_dump(mode="json") for step in slide.timeline],
+                "statistics": [item.model_dump(mode="json") for item in slide.statistics],
+                "quote": slide.quote,
+                "attribution": slide.attribution,
+                "media": [media.model_dump(mode="json") for media in _slide_media(slide)],
+            }
+        )
+    return PresentationDocument(title=presentation.title, slides=semantic_slides)
+
+
+def build_theme_definition(theme_name: str) -> ThemeDefinition:
+    tokens = get_theme_tokens(theme_name)
+
+    def _font_family_name(value: str) -> str:
+        first_token = value.split(",", 1)[0].strip()
+        first_token = first_token.strip("'")
+        return first_token or value
+
+    return ThemeDefinition(
+        id=tokens.name,
+        name=tokens.name.replace("_", " ").title(),
+        description=f"Semantic theme for {tokens.name}",
+        tokens=ThemeTokens(
+            background=tokens.background,
+            background_alt=tokens.background_alt,
+            surface=tokens.surface,
+            surface_alt=tokens.background_alt,
+            text_primary=tokens.text_color,
+            text_secondary=tokens.muted_text_color,
+            accent_primary=tokens.accent_color,
+            accent_secondary=tokens.accent_soft_color,
+            border=tokens.border_color,
+            focus_ring=tokens.accent_color,
+            fonts=ThemeFonts(
+                heading=_font_family_name(tokens.heading_font_family),
+                body=_font_family_name(tokens.body_font_family),
+                mono="ui-monospace",
+                fallbacks=["system-ui", "sans-serif"],
+            ),
+            spacing_scale=tokens.spacing_scale,
+            typography_scale=tokens.typography_scale,
+            radius_scale=1.0,
+            shadow_scale=1.0,
+            component_styles={
+                "panel": {
+                    "radius_token": "rounded",
+                    "elevation_token": "elevated",
+                },
+            },
+        ),
+    )
+
+
+def build_layout_specs(document: PresentationDocument) -> list[LayoutSpec]:
+    specs: list[LayoutSpec] = []
+    for slide in document.slides:
+        try:
+            specs.append(get_layout_spec(slide.layout_name))
+        except KeyError as exc:
+            raise KeyError(f"Unknown layout '{slide.layout_name}' for slide '{slide.id}'.") from exc
+    return specs
+
+
+def build_renderer_context(target: RendererTarget | str) -> RendererContext:
+    normalized = RendererTarget(target)
+    from app.semantic.catalog import build_renderer_context as _build_renderer_context
+
+    return _build_renderer_context(normalized)

@@ -1,0 +1,38 @@
+{
+  "title": "Understanding Change",
+  "version": "1.0.0",
+  "metadata": {
+    "purpose": "Example semantic presentation document"
+  },
+  "slides": [
+    {
+      "id": "slide_1",
+      "order": 1,
+      "layout_name": "title.centered",
+      "title": "Understanding Change",
+      "subtitle": "Rates of change, accumulation, and how the two connect.",
+      "bullets": [],
+      "media": []
+    },
+    {
+      "id": "slide_2",
+      "order": 2,
+      "layout_name": "content.bullets",
+      "title": "Differentiation",
+      "bullets": [
+        "Rates of change",
+        "Slope and local behavior",
+        "Immediate direction of a function"
+      ],
+      "media": []
+    },
+    {
+      "id": "slide_3",
+      "order": 3,
+      "layout_name": "quote.centered",
+      "quote": "The derivative tells you how fast the story is changing.",
+      "attribution": "AuraSlides AI",
+      "media": []
+    }
+  ]
+}
