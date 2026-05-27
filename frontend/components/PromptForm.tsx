@@ -14,6 +14,13 @@ interface PromptFormProps {
 
 
 const STYLE_OPTIONS = ["modern", "minimal", "corporate", "playful"];
+const IMAGE_SOURCE_OPTIONS: Array<{
+  value: GeneratePresentationPayload["image_source"];
+  label: string;
+}> = [
+  { value: "gemini", label: "Google image AI" },
+  { value: "image_research", label: "Image research" },
+];
 
 
 export function PromptForm({
@@ -27,6 +34,8 @@ export function PromptForm({
   );
   const [slideCount, setSlideCount] = useState(5);
   const [style, setStyle] = useState("modern");
+  const [imageSource, setImageSource] =
+    useState<GeneratePresentationPayload["image_source"]>("gemini");
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,6 +43,7 @@ export function PromptForm({
       prompt,
       slide_count: slideCount,
       style,
+      image_source: imageSource,
     });
   }
 
@@ -79,6 +89,33 @@ export function PromptForm({
             className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-spark focus:bg-white"
           />
         </label>
+
+        <fieldset>
+          <legend className="mb-2 block text-sm font-medium text-slate-700">
+            Presentation images
+          </legend>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {IMAGE_SOURCE_OPTIONS.map((option) => {
+              const active = imageSource === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => setImageSource(option.value)}
+                  className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
+                    active
+                      ? "border-ink bg-ink text-white"
+                      : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-white disabled:opacity-60"
+                  }`}
+                  aria-pressed={active}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
       </div>
 
       <button

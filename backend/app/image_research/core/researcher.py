@@ -12,6 +12,7 @@ from app.image_research.core.clip_scorer import ClipScorer
 from app.image_research.core.downloader import DownloadError, download_image
 from app.image_research.core.license_checker import is_allowed_license, license_score
 from app.image_research.core.search_planner import SearchPlanner
+from app.image_research.core.search_planner import compact_search_query
 from app.image_research.core.storage import (
     copy_ranked_image,
     ensure_output_dirs,
@@ -185,7 +186,7 @@ class ImageResearcher:
     async def _expanded_queries(
         self, plan: SearchPlan, request: ImageResearchRequest, warnings: list[str]
     ) -> list[str]:
-        queries = [request.prompt]
+        queries = [compact_search_query(request.prompt), plan.main_query]
         type_queries: list[str] = []
         if plan.image_type == "diagram":
             type_queries.extend(
@@ -220,7 +221,6 @@ class ImageResearcher:
         except Exception as exc:
             warnings.append(f"Wikipedia query expansion failed: {exc}")
         queries.extend(await self._multilingual_wikipedia_queries(request.prompt, warnings))
-        queries.append(plan.main_query)
         queries.extend(type_queries)
         queries.extend(wiki_queries)
         queries.extend(plan.alternative_queries)
@@ -228,7 +228,7 @@ class ImageResearcher:
         seen: set[str] = set()
         out: list[str] = []
         for query in queries:
-            clean = " ".join(query.split())
+            clean = compact_search_query(query)
             key = clean.lower()
             if clean and key not in seen:
                 seen.add(key)
@@ -322,6 +322,7 @@ class ImageResearcher:
             candidates,
             key=lambda candidate: (
                 self._metadata_score(candidate, request, plan),
+                self._aspect_ratio_score(candidate, request.preferred_orientation),
                 self._resolution_score(candidate),
                 self._source_score(candidate.source),
             ),
@@ -392,11 +393,12 @@ class ImageResearcher:
             candidate.clip_score = round(raw, 6)
             metadata = self._metadata_score(candidate, request, plan)
             candidate.final_score = round(
-                metadata * 0.46
-                + normalized * 0.29
+                metadata * 0.42
+                + normalized * 0.27
                 + license_score(candidate.license_name) * 0.10
                 + self._source_score(candidate.source) * 0.10
-                + self._resolution_score(candidate) * 0.05,
+                + self._resolution_score(candidate) * 0.06
+                + self._aspect_ratio_score(candidate, request.preferred_orientation) * 0.05,
                 6,
             )
         return candidates
@@ -566,6 +568,18 @@ class ImageResearcher:
         if candidate.width >= 800 and candidate.height >= 500:
             return 0.75
         return 0.5
+
+    def _aspect_ratio_score(self, candidate: ImageCandidate, preferred_orientation: str | None) -> float:
+        if not candidate.width or not candidate.height:
+            return 0.6
+        ratio = candidate.width / max(candidate.height, 1)
+        if preferred_orientation == "portrait":
+            return 1.0 if ratio < 0.95 else 0.35
+        if preferred_orientation == "square":
+            return max(0.25, 1 - min(abs(ratio - 1), 1))
+        if preferred_orientation == "landscape":
+            return max(0.25, 1 - min(abs(ratio - (16 / 9)) / 1.2, 1))
+        return 0.9 if ratio >= 1 else 0.55
 
     def _source_score(self, source: str) -> float:
         return {

@@ -1,4 +1,6 @@
+import importlib.util
 import json
+import re
 from typing import Any
 
 from app.image_research.config import settings
@@ -8,6 +10,38 @@ from app.image_research.schemas import ImageResearchRequest, SearchPlan
 VALID_ORIENTATIONS = {"any", "landscape", "portrait", "square"}
 VALID_TYPES = {"photo", "illustration", "icon", "diagram", "any"}
 TYPE_ALIASES = {"graph": "diagram", "chart": "diagram", "schema": "diagram"}
+QUERY_STOP_WORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "background",
+    "captions",
+    "clean",
+    "deck",
+    "displaying",
+    "for",
+    "generic",
+    "grounded",
+    "image",
+    "keep",
+    "labels",
+    "logos",
+    "match",
+    "modern",
+    "no",
+    "or",
+    "presentation",
+    "relevant",
+    "restrained",
+    "setting",
+    "symbols",
+    "the",
+    "visible",
+    "visual",
+    "with",
+    "words",
+}
 
 
 def canonical_image_type(value: str | None) -> str:
@@ -15,20 +49,40 @@ def canonical_image_type(value: str | None) -> str:
     return TYPE_ALIASES.get(clean, clean if clean in VALID_TYPES else "any")
 
 
+def compact_search_query(value: str, max_length: int = 95) -> str:
+    text = " ".join(value.split())
+    text = re.split(r"\bKeep it\b|\bMatch a\b|\bNo visible\b", text, maxsplit=1, flags=re.I)[0]
+    match = re.search(r"Presentation visual for ['\"]([^'\"]+)['\"]:\s*(.+)", text, flags=re.I)
+    if match:
+        text = f"{match.group(1)} {match.group(2)}"
+    words = re.findall(r"[A-Za-z0-9]+", text)
+    out: list[str] = []
+    seen: set[str] = set()
+    for word in words:
+        key = word.lower()
+        if key in QUERY_STOP_WORDS or key in seen:
+            continue
+        seen.add(key)
+        next_value = " ".join([*out, word])
+        if len(next_value) > max_length:
+            break
+        out.append(word)
+    return " ".join(out) or value[:max_length].strip()
+
+
 class SearchPlanner:
     def __init__(self) -> None:
         self.api_key = settings.groq_api_key
         self.model = settings.groq_model
+        self.groq_available = importlib.util.find_spec("groq") is not None
 
     async def create_plan(self, request: ImageResearchRequest) -> tuple[SearchPlan, list[str]]:
         warnings: list[str] = []
-        if self.api_key:
+        if self.api_key and self.groq_available:
             try:
                 return await self._create_groq_plan(request), warnings
             except Exception as exc:
                 warnings.append(f"Groq planning failed; used fallback planner: {exc}")
-        else:
-            warnings.append("GROQ_API_KEY missing; used fallback planner.")
         return self._fallback(request), warnings
 
     async def _create_groq_plan(self, request: ImageResearchRequest) -> SearchPlan:
@@ -106,13 +160,14 @@ class SearchPlanner:
 
     def _fallback(self, request: ImageResearchRequest) -> SearchPlan:
         style = request.style or ""
+        query = compact_search_query(request.prompt)
         return SearchPlan(
-            main_query=request.prompt,
+            main_query=query,
             alternative_queries=[
-                f"{request.prompt} {style}".strip(),
-                f"{request.prompt} photograph".strip(),
-                f"{request.prompt} Wikimedia Commons",
-                f"{request.prompt} archival image",
+                f"{query} {style}".strip(),
+                f"{query} photograph".strip(),
+                f"{query} Wikimedia Commons",
+                f"{query} stock photo",
             ],
             visual_requirements=[
                 "The image should clearly match the user prompt",

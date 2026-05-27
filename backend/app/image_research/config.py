@@ -37,4 +37,4 @@ OUTPUT_DIR = IMAGE_RESEARCH_DIR
 IMAGES_DIR = OUTPUT_DIR / "images"
 TEMP_DIR = OUTPUT_DIR / "temp"
 METADATA_DIR = OUTPUT_DIR / "metadata"
-PUBLIC_IMAGES_PREFIX = "/research/images"
+PUBLIC_IMAGES_PREFIX = "/generated/image_research/images"

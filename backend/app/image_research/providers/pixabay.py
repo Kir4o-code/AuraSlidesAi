@@ -4,6 +4,16 @@ from app.image_research.providers.base import BaseImageProvider
 from app.image_research.schemas import ImageCandidate
 
 
+def _pixabay_query(value: str) -> str:
+    out: list[str] = []
+    for word in value.split():
+        next_value = " ".join([*out, word])
+        if len(next_value) > 95:
+            break
+        out.append(word)
+    return " ".join(out) or value[:95].strip()
+
+
 class PixabayProvider(BaseImageProvider):
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -16,7 +26,7 @@ class PixabayProvider(BaseImageProvider):
             pixabay_type = "illustration"
         params = {
             "key": self.api_key,
-            "q": query,
+            "q": _pixabay_query(query),
             "per_page": min(max(per_page, 3), 200),
             "safesearch": "true",
             "image_type": pixabay_type,

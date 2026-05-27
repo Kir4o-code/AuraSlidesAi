@@ -69,6 +69,7 @@ export interface GeneratePresentationPayload {
   prompt: string;
   slide_count: number;
   style: string;
+  image_source: "gemini" | "image_research";
 }
 
 export interface GeneratePresentationResponse {
@@ -133,7 +134,7 @@ const PROGRESS_STAGES = [
   { label: "Sending prompt to the backend", value: 10 },
   { label: "Planning slides with Gemini", value: 34 },
   { label: "Validating JSON with Pydantic", value: 58 },
-  { label: "Generating slide images with Gemini", value: 76 },
+  { label: "Resolving slide images", value: 76 },
   { label: "Exporting the PDF", value: 92 },
 ];
 

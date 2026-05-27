@@ -43,11 +43,12 @@ async def generate_presentation_route(
             style=payload.style,
         )
         logger.info(
-            "[%s] Starting Gemini image generation for image-backed slides.",
+            "[%s] Starting image enrichment for image-backed slides. source=%s",
             request_id,
+            payload.image_source,
         )
-        presentation = await enrich_presentation_images(presentation)
-        logger.info("[%s] Gemini planning complete. Rendering PPTX and PDF.", request_id)
+        presentation = await enrich_presentation_images(presentation, payload.image_source)
+        logger.info("[%s] Planning and image enrichment complete. Rendering PPTX and PDF.", request_id)
         pptx_name, pdf_name = await asyncio.to_thread(build_presentation_exports, presentation)
         logger.info(
             "[%s] Presentation export complete. pptx=%s pdf=%s duration=%.2fs",
