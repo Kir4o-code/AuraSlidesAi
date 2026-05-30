@@ -17,16 +17,28 @@ class SlideType(str, Enum):
 
 
 class ThemeName(str, Enum):
-    MODERN_DARK = "modern_dark"
-    MODERN_LIGHT = "modern_light"
-    EDITORIAL = "editorial"
-    CORPORATE = "corporate"
-    PLAYFUL = "playful"
+    CLEAN_SCHOOL = "clean_school"
+    MODERN_DARK_TECH = "modern_dark_tech"
+    ACADEMIC_FORMAL = "academic_formal"
+    STARTUP_PITCH = "startup_pitch"
+    PHOTO_EDITORIAL = "photo_editorial"
+    MINIMAL_CORPORATE = "minimal_corporate"
+    CREATIVE_GRADIENT = "creative_gradient"
+    DATA_REPORT = "data_report"
+    NATURE_ORGANIC = "nature_organic"
+    LUXURY_EDITORIAL = "luxury_editorial"
+    PLAYFUL_LEARNING = "playful_learning"
+    MONOCHROME_BOLD = "monochrome_bold"
 
 
 class ImageSource(str, Enum):
     GEMINI = "gemini"
     IMAGE_RESEARCH = "image_research"
+
+
+class PlanningMode(str, Enum):
+    AUTOMATIC = "automatic"
+    GUIDED = "guided"
 
 
 class ImageClass(str, Enum):
@@ -134,15 +146,32 @@ class Slide(BaseModel):
 
 class Presentation(BaseModel):
     title: str = Field(min_length=1, max_length=160)
-    theme: ThemeName = Field(default=ThemeName.MODERN_DARK)
+    theme: ThemeName = Field(default=ThemeName.MODERN_DARK_TECH)
     slides: list[Slide] = Field(min_length=3, max_length=12)
+
+
+class GuidedSlideIntent(BaseModel):
+    purpose: str = Field(min_length=3, max_length=500)
+    requested_type: SlideType | None = None
 
 
 class GeneratePresentationRequest(BaseModel):
     prompt: str = Field(min_length=5, max_length=4000)
     slide_count: int = Field(default=5, ge=3, le=10)
     style: str = Field(default="modern", min_length=1, max_length=40)
+    template: str | None = Field(default=None, max_length=80)
     image_source: ImageSource = ImageSource.GEMINI
+    planning_mode: PlanningMode = PlanningMode.AUTOMATIC
+    slide_outline: list[GuidedSlideIntent] = Field(default_factory=list, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_guided_outline(self) -> "GeneratePresentationRequest":
+        if self.planning_mode == PlanningMode.GUIDED:
+            if len(self.slide_outline) < 3:
+                raise ValueError("Guided presentations need at least three slide briefs.")
+            if self.slide_count != len(self.slide_outline):
+                raise ValueError("Guided slide count must match the number of slide briefs.")
+        return self
 
 
 class GeneratePresentationResponse(BaseModel):

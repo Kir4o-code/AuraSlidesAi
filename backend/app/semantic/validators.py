@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from app.semantic.catalog import LAYOUT_SPEC_REGISTRY, RENDERER_CAPABILITY_MATRIX
 from app.semantic.contracts import LayoutSpec, PresentationDocument, RendererContext, ThemeDefinition
 
@@ -22,8 +24,11 @@ def validate_theme_definition(theme: ThemeDefinition) -> ThemeDefinition:
             if key.lower() in {"layout", "region", "width", "height", "position"}:
                 raise ValueError("Theme component styles must not contain layout concerns.")
             value = styles[key]
-            if isinstance(value, str) and any(marker in value.lower() for marker in ("px", "rem", "em", "rgba(", "linear-gradient", "font:", "margin:", "padding:")):
-                raise ValueError("Theme component styles must stay abstract and renderer-neutral.")
+            if isinstance(value, str):
+                lowered = value.lower()
+                has_css_unit = re.search(r"(^|[\s:(,])[-+]?\d*\.?\d+(px|rem|em)\b", lowered)
+                if has_css_unit or any(marker in lowered for marker in ("rgba(", "linear-gradient", "font:", "margin:", "padding:")):
+                    raise ValueError("Theme component styles must stay abstract and renderer-neutral.")
     return theme
 
 

@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.image_research.core.image_classes import CLASS_KEYWORDS, ImageClass, infer_image_class
-from app.schemas.presentation import Presentation, Slide, SlideType, StatisticItem, ThemeName, TimelineStep
+from app.schemas.presentation import GuidedSlideIntent, PlanningMode, Presentation, Slide, SlideType, StatisticItem, ThemeName, TimelineStep
 from app.services.theme_registry import resolve_theme_name
 
 
@@ -83,7 +83,7 @@ class GeminiSlidePlan(BaseModel):
 
 class GeminiPresentationPlan(BaseModel):
     title: str
-    theme: str = ThemeName.MODERN_DARK.value
+    theme: str = ThemeName.MODERN_DARK_TECH.value
     slides: list[GeminiSlidePlan] = Field(default_factory=list)
 
 
@@ -153,10 +153,14 @@ Return valid JSON only. No markdown, no prose, no code fences.
 
 CRITICAL RULES:
 1. SLIDE COUNT: Use EXACTLY the requested number of slides.
-2. BREVITY: Maximum 3-4 bullet points per slide. Each bullet MUST be under 12 words. Headlines MUST be under 7 words.
+2. BREVITY: Maximum 3-4 bullet points per slide. Each bullet MUST be under 14 words. Headlines MUST be concise.
 3. SPACING: Ensure content is minimal to allow for significant white space. NEVER overload a slide.
-4. QUALITY: Content must be punchy, professional, and specific. No generic filler.
+4. QUALITY: Give every slide one clear job in the narrative. Use concrete explanations, mechanisms, examples, tradeoffs, or next actions.
 5. SCHEMA: Output MUST match the provided JSON schema exactly.
+6. ACCURACY: Do not invent statistics, quotations, citations, or precise factual claims. If a number is not supplied or reliably known, explain the point without a number.
+7. VARIETY: Do not repeat the same slide structure mechanically. Use text-only, image-backed, comparison, timeline, statistics, hero, or quote layouts only when they fit the information.
+8. NO FILLER: Avoid generic phrases such as "key insights", "unlock potential", "embrace innovation", or restating the topic without adding information.
+9. GUIDED MODE: When ordered slide briefs are provided, follow each brief in order. Do not insert, remove, merge, or reorder slides.
 
 IMAGE PROMPT RULES (EXTREMELY IMPORTANT):
 - Image prompts must feel like they belong in a polished presentation, not an AI art gallery.
@@ -371,16 +375,14 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
         slide.image_prompt = None
         slide.image_class = None
     elif slide.type == SlideType.TITLE_BULLETS.value:
-        slide.type = SlideType.TITLE_BULLETS_IMAGE.value
         slide.title = slide.title if not _looks_generic_title(slide.title) else _fallback_slide_title(presentation_title, index)
         slide.bullets = _normalize_bullets(
             slide.bullets,
             limit=5,
-            fallback=_fallback_bullets_for_slide(slide.title or presentation_title, presentation_title, variant="image", slot=index),
+            fallback=_fallback_bullets_for_slide(slide.title or presentation_title, presentation_title, slot=index),
         )
-        raw_image_prompt = slide.image_prompt
-        slide.image_class = _normalize_image_class(slide.image_class, " ".join(filter(None, [slide.title, raw_image_prompt])), default=ImageClass.ICON)
-        slide.image_prompt = _normalize_image_prompt(raw_image_prompt, slide.title, presentation_title)
+        slide.image_prompt = None
+        slide.image_class = None
     elif slide.type == SlideType.TITLE_BULLETS_IMAGE.value:
         slide.title = slide.title if not _looks_generic_title(slide.title) else _fallback_slide_title(presentation_title, index, variant="image")
         slide.bullets = _normalize_bullets(
@@ -426,8 +428,13 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
     return slide
 
 
-def _normalize_plan(plan: GeminiPresentationPlan, slide_count: int) -> GeminiPresentationPlan:
+def _normalize_plan(
+    plan: GeminiPresentationPlan,
+    slide_count: int,
+    slide_outline: list[GuidedSlideIntent] | None = None,
+) -> GeminiPresentationPlan:
     slides = list(plan.slides[:slide_count])
+    guided = bool(slide_outline)
 
     if not slides:
         slides = [
@@ -446,7 +453,7 @@ def _normalize_plan(plan: GeminiPresentationPlan, slide_count: int) -> GeminiPre
             ),
         ]
 
-    if _resolve_slide_type(slides[0].type) != SlideType.TITLE_SLIDE:
+    if not guided and _resolve_slide_type(slides[0].type) != SlideType.TITLE_SLIDE:
         slides.insert(0, GeminiSlidePlan(type=SlideType.TITLE_SLIDE.value, title=plan.title, subtitle="Presentation overview"))
 
     while len(slides) < slide_count:
@@ -460,6 +467,9 @@ def _normalize_plan(plan: GeminiPresentationPlan, slide_count: int) -> GeminiPre
         )
 
     slides = slides[:slide_count]
+    for index, intent in enumerate(slide_outline or []):
+        if intent.requested_type and index < len(slides):
+            slides[index].type = intent.requested_type.value
     normalized_slides = [
         _normalize_slide_plan(slide, plan.title, index + 1)
         for index, slide in enumerate(slides)
@@ -556,16 +566,33 @@ def _extract_image_bytes(response: Any) -> bytes:
     raise GeminiImageGenerationError("Gemini did not return valid image bytes in any part.")
 
 
-async def generate_presentation(prompt: str, slide_count: int, style: str) -> Presentation:
+async def generate_presentation(
+    prompt: str,
+    slide_count: int,
+    style: str,
+    planning_mode: PlanningMode = PlanningMode.AUTOMATIC,
+    slide_outline: list[GuidedSlideIntent] | None = None,
+) -> Presentation:
     settings = get_settings()
     client = get_client()
     logger.info(
-        "Gemini planning request starting. model=%s slide_count=%s style=%s prompt_chars=%s",
+        "Gemini planning request starting. model=%s slide_count=%s style=%s planning_mode=%s prompt_chars=%s",
         settings.gemini_planning_model,
         slide_count,
         style,
+        planning_mode,
         len(prompt),
     )
+
+    outline_prompt = ""
+    if planning_mode == PlanningMode.GUIDED:
+        outline_prompt = f"""
+
+ORDERED SLIDE BRIEFS:
+Use this JSON array as a strict ordered plan. Expand each purpose into useful slide content.
+If requested_type is null, choose the best allowed type for that slide.
+{json.dumps([item.model_dump(mode="json") for item in slide_outline or []], ensure_ascii=False)}
+""".rstrip()
 
     user_prompt = f"""
 Create a {slide_count}-slide presentation plan.
@@ -573,9 +600,12 @@ Requirement: Generate EXACTLY {slide_count} slides. Do not stop until you have {
 
 CONTENT RULES:
 - Maximum 3-4 bullets per slide.
-- Maximum 10-12 words per bullet.
-- Headlines MUST be extremely short (under 7 words).
+- Maximum 12-14 words per bullet.
+- Headlines should be concise and informative.
 - Prioritize visual breathing room.
+- Make each slide add new information instead of repeating the topic.
+- Prefer a varied narrative rhythm. Do not turn every slide into title_bullets_image.
+- Allowed slide types: title_slide, title_bullets, title_bullets_image, hero_image, comparison, timeline, statistics, quote.
 
 Preferred direction:
 {style}
@@ -584,6 +614,7 @@ Select a theme name from the registry, but do not describe colors, spacing, font
 
 Topic:
 {prompt}
+{outline_prompt}
 
 Return JSON only.
 """.strip()
@@ -611,7 +642,7 @@ Return JSON only.
         logger.exception("Gemini planning returned invalid JSON.")
         raise GeminiPlanningError("Gemini returned invalid presentation JSON.") from exc
 
-    normalized_plan = _normalize_plan(plan, slide_count)
+    normalized_plan = _normalize_plan(plan, slide_count, slide_outline if planning_mode == PlanningMode.GUIDED else None)
     presentation = _plan_to_presentation(normalized_plan)
     logger.info(
         "Gemini planning complete. title=%s slides=%s types=%s theme=%s",

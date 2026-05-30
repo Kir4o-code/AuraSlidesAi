@@ -360,6 +360,27 @@ def _export_font_name(value: str | None, fallback: str = "Aptos") -> str:
     return first or fallback
 
 
+def _component_style(theme: ThemeDefinition, component: str) -> dict:
+    return theme.tokens.component_styles.get(component, {})
+
+
+def _semantic_shape(theme: ThemeDefinition, component: str = "panel"):
+    return MSO_SHAPE.RECTANGLE if _component_style(theme, component).get("style") == "square" else MSO_SHAPE.ROUNDED_RECTANGLE
+
+
+def _add_fitted_semantic_picture(slide, path: Path, left: float, top: float, width: float, height: float) -> None:
+    image_width, image_height = _fit_image(path, width, height)
+    offset_left = left + (width - image_width) / 2
+    offset_top = top + (height - image_height) / 2
+    slide.shapes.add_picture(
+        str(path),
+        Inches(_px(offset_left)),
+        Inches(_px(offset_top)),
+        Inches(_px(image_width)),
+        Inches(_px(image_height)),
+    )
+
+
 def _add_shape_icon(slide, left: float, top: float, size: float, icon: str, theme: ThemeDefinition) -> None:
     bg = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(_px(left)), Inches(_px(top)), Inches(_px(size)), Inches(_px(size)))
     bg.fill.solid()
@@ -417,19 +438,31 @@ def _render_layout_element(slide, element: LayoutElement, theme: ThemeDefinition
     height = element.height
 
     if element.kind == LayoutElementKind.PANEL:
-        panel = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
+        panel = slide.shapes.add_shape(_semantic_shape(theme), Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
         panel.fill.solid()
         panel.fill.fore_color.rgb = _rgb(theme.tokens.surface)
         panel.line.color.rgb = _rgb(theme.tokens.border)
         panel.line.width = Pt(1)
     elif element.kind == LayoutElementKind.IMAGE:
         local_path = element.content.get("local_path") if isinstance(element.content, dict) else None
-        public_url = element.content.get("src") if isinstance(element.content, dict) else None
         image_path = Path(local_path) if local_path else None
+        inset = int(_component_style(theme, "image").get("frame_inset") or 0)
+        frame = slide.shapes.add_shape(_semantic_shape(theme), Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
+        frame.fill.solid()
+        frame.fill.fore_color.rgb = _rgb(theme.tokens.surface)
+        frame.line.color.rgb = _rgb(theme.tokens.border)
+        frame.line.width = Pt(1)
         if image_path and image_path.exists():
-            slide.shapes.add_picture(str(image_path), Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
+            _add_fitted_semantic_picture(
+                slide,
+                image_path,
+                left + inset,
+                top + inset,
+                max(1, width - (inset * 2)),
+                max(1, height - (inset * 2)),
+            )
         else:
-            placeholder = slide.shapes.add_textbox(Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
+            placeholder = slide.shapes.add_textbox(Inches(_px(left + inset)), Inches(_px(top + inset)), Inches(_px(max(1, width - (inset * 2)))), Inches(_px(max(1, height - (inset * 2)))))
             frame = placeholder.text_frame
             frame.word_wrap = True
             frame.clear()
@@ -438,13 +471,11 @@ def _render_layout_element(slide, element: LayoutElement, theme: ThemeDefinition
             run.font.name = _export_font_name(theme.tokens.fonts.body)
             run.font.size = Pt(max(10, (element.font_size or 18) * 0.7))
             run.font.color.rgb = _rgb(theme.tokens.text_primary)
-            placeholder.fill.solid()
-            placeholder.fill.fore_color.rgb = _rgb(theme.tokens.background_alt)
-            placeholder.line.color.rgb = _rgb(theme.tokens.border)
     elif element.kind == LayoutElementKind.BULLET_ITEM:
-        card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
+        bullet_style = _component_style(theme, "bullet").get("style")
+        card = slide.shapes.add_shape(_semantic_shape(theme), Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
         card.fill.solid()
-        card.fill.fore_color.rgb = _rgb(theme.tokens.surface)
+        card.fill.fore_color.rgb = _rgb(theme.tokens.background_alt if bullet_style == "lines" else theme.tokens.surface)
         card.line.color.rgb = _rgb(theme.tokens.border)
         card.line.width = Pt(1)
         _add_shape_icon(slide, left + 16, top + 14, 42, str(element.content.get("icon") or "target"), theme)
@@ -514,7 +545,14 @@ def _render_layout_slide(prs: PptxPresentation, slide_data: LayoutedSlide, theme
     stops[1].color.rgb = _rgb(theme.tokens.background_alt)
     background.line.fill.background()
 
-    accent = page.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(0.12), SLIDE_HEIGHT)
+    accent_position = _component_style(theme, "background").get("accent_position")
+    accent = page.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        Inches(0),
+        Inches(0),
+        SLIDE_WIDTH if accent_position == "top" else Inches(0.12),
+        Inches(0.12) if accent_position == "top" else SLIDE_HEIGHT,
+    )
     accent.fill.solid()
     accent.fill.fore_color.rgb = _rgb(theme.tokens.accent_primary)
     accent.line.fill.background()

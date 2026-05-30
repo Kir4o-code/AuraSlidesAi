@@ -108,8 +108,9 @@ def build_theme_definition(theme_name: str) -> ThemeDefinition:
 
     return ThemeDefinition(
         id=tokens.name,
-        name=tokens.name.replace("_", " ").title(),
-        description=f"Semantic theme for {tokens.name}",
+        name=tokens.display_name,
+        description=tokens.description,
+        tags=list(tokens.visual_tags),
         tokens=ThemeTokens(
             background=tokens.background,
             background_alt=tokens.background_alt,
@@ -132,9 +133,23 @@ def build_theme_definition(theme_name: str) -> ThemeDefinition:
             radius_scale=1.0,
             shadow_scale=1.0,
             component_styles={
+                "background": {
+                    "accent_position": tokens.accent_position,
+                    "layout_style": tokens.layout_style,
+                },
                 "panel": {
-                    "radius_token": "rounded",
-                    "elevation_token": "elevated",
+                    "style": tokens.panel_style,
+                    "radius": tokens.panel_radius,
+                    "padding": tokens.panel_padding,
+                },
+                "bullet": {
+                    "style": tokens.bullet_style,
+                },
+                "image": {
+                    "style": tokens.image_style,
+                    "radius": tokens.image_radius,
+                    "frame_inset": tokens.image_frame_inset,
+                    "fit": tokens.image_fit,
                 },
             },
         ),

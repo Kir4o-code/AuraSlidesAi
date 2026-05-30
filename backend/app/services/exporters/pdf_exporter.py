@@ -77,6 +77,9 @@ class PdfExporter(BaseExporter):
         except Exception:
             return colors.HexColor(fallback)
 
+    def _component_style(self, theme: ThemeDefinition, component: str) -> dict:
+        return theme.tokens.component_styles.get(component, {})
+
     def _pt(self, slide_width: int, slide_height: int, x: int, y: int, width: int, height: int) -> tuple[float, float, float, float]:
         sx = self.page_width / slide_width
         sy = self.page_height / slide_height
@@ -148,9 +151,11 @@ class PdfExporter(BaseExporter):
             page.circle(x + size / 2, y + size / 2, size * 0.06, fill=1, stroke=0)
 
     def _draw_bullet_card(self, page: canvas.Canvas, element: LayoutElement, x: float, y: float, w: float, h: float, theme: ThemeDefinition) -> None:
-        page.setFillColor(self._color(theme.tokens.surface))
+        bullet_style = self._component_style(theme, "bullet").get("style")
+        page.setFillColor(self._color(theme.tokens.background_alt if bullet_style == "lines" else theme.tokens.surface))
         page.setStrokeColor(self._color(theme.tokens.border))
-        page.roundRect(x, y, w, h, 8, fill=1, stroke=1)
+        radius = float(self._component_style(theme, "panel").get("radius") or 8) * 0.36
+        page.roundRect(x, y, w, h, radius, fill=1, stroke=1)
         icon_size = min(34, h - 12)
         self._draw_icon(page, x + 10, y + h - icon_size - 10, icon_size, str(element.content.get("icon") or "target"), theme)
         self._draw_text(page, element, x + 52, y + 8, max(1, w - 60), max(1, h - 16), theme)
@@ -160,16 +165,21 @@ class PdfExporter(BaseExporter):
         if element.kind == LayoutElementKind.PANEL:
             page.setFillColor(self._color(theme.tokens.surface))
             page.setStrokeColor(self._color(theme.tokens.border))
-            page.roundRect(x, y, w, h, 8, fill=1, stroke=1)
+            radius = float(self._component_style(theme, "panel").get("radius") or 8) * 0.36
+            page.roundRect(x, y, w, h, radius, fill=1, stroke=1)
         elif element.kind == LayoutElementKind.IMAGE:
             local_path = element.content.get("local_path") if isinstance(element.content, dict) else None
             image_path = Path(local_path) if local_path else None
+            inset = float(self._component_style(theme, "image").get("frame_inset") or 0) * (self.page_width / slide_width)
+            page.setFillColor(self._color(theme.tokens.surface))
+            page.setStrokeColor(self._color(theme.tokens.border))
+            page.rect(x, y, w, h, fill=1, stroke=1)
             if image_path and image_path.exists():
-                page.drawImage(ImageReader(str(image_path)), x, y, w, h, preserveAspectRatio=True, anchor="c")
+                page.drawImage(ImageReader(str(image_path)), x + inset, y + inset, max(1, w - inset * 2), max(1, h - inset * 2), preserveAspectRatio=True, anchor="c")
             else:
                 page.setFillColor(self._color(theme.tokens.background_alt))
                 page.setStrokeColor(self._color(theme.tokens.border))
-                page.rect(x, y, w, h, fill=1, stroke=1)
+                page.rect(x + inset, y + inset, max(1, w - inset * 2), max(1, h - inset * 2), fill=1, stroke=1)
         elif element.kind == LayoutElementKind.BULLET_ITEM:
             self._draw_bullet_card(page, element, x, y, w, h, theme)
         elif isinstance(element.content, dict) and element.content.get("decorative_icon"):
@@ -186,7 +196,10 @@ class PdfExporter(BaseExporter):
             doc.setFillColor(self._color(theme.tokens.background))
             doc.rect(0, 0, self.page_width, self.page_height, fill=1, stroke=0)
             doc.setFillColor(self._color(theme.tokens.accent_primary))
-            doc.rect(0, 0, 9, self.page_height, fill=1, stroke=0)
+            if self._component_style(theme, "background").get("accent_position") == "top":
+                doc.rect(0, self.page_height - 9, self.page_width, 9, fill=1, stroke=0)
+            else:
+                doc.rect(0, 0, 9, self.page_height, fill=1, stroke=0)
             for element in sorted(slide.elements, key=lambda item: item.z_index):
                 self._draw_element(doc, element, theme, slide.canvas_width, slide.canvas_height)
             doc.showPage()

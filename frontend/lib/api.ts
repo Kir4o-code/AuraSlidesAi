@@ -1,9 +1,16 @@
 export type ThemeName =
-  | "modern_dark"
-  | "modern_light"
-  | "editorial"
-  | "corporate"
-  | "playful";
+  | "clean_school"
+  | "modern_dark_tech"
+  | "academic_formal"
+  | "startup_pitch"
+  | "photo_editorial"
+  | "minimal_corporate"
+  | "creative_gradient"
+  | "data_report"
+  | "nature_organic"
+  | "luxury_editorial"
+  | "playful_learning"
+  | "monochrome_bold";
 
 export type SlideType =
   | "title_slide"
@@ -14,6 +21,13 @@ export type SlideType =
   | "timeline"
   | "statistics"
   | "quote";
+
+export type PlanningMode = "automatic" | "guided";
+
+export interface GuidedSlideIntent {
+  purpose: string;
+  requested_type?: SlideType | null;
+}
 
 export interface ResolvedImageAsset {
   local_path: string;
@@ -129,7 +143,10 @@ export interface GeneratePresentationPayload {
   prompt: string;
   slide_count: number;
   style: string;
+  template: ThemeName;
   image_source: "gemini" | "image_research";
+  planning_mode: PlanningMode;
+  slide_outline?: GuidedSlideIntent[];
 }
 
 export interface GeneratePresentationResponse {

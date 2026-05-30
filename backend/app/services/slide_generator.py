@@ -41,6 +41,7 @@ def prepare_export_bundle(presentation: Presentation) -> tuple[LayoutedPresentat
     semantic_context = build_renderer_context(renderer_target)
     layouted_document = build_layouted_presentation(
         semantic_document,
+        theme=semantic_theme,
         debug_mode=os.getenv("LAYOUT_DEBUG", "false").lower() in {"1", "true", "yes", "on"},
     )
 
@@ -164,6 +165,16 @@ def build_theme_tokens(presentation: Presentation) -> dict[str, str]:
         "text": tokens.text_color,
         "muted": tokens.muted_text_color,
         "accent_rgb": ", ".join(str(channel) for channel in accent_rgb),
+        "heading_font_family": tokens.heading_font_family,
+        "body_font_family": tokens.body_font_family,
+        "background_position": tokens.background_position,
+        "background_size": tokens.background_size,
+        "base_font_size": str(tokens.base_font_size),
+        "heading_scale": str(tokens.heading_scale),
+        "body_scale": str(tokens.body_scale),
+        "line_height": str(tokens.line_height),
+        "spacing_scale": str(tokens.spacing_scale),
+        "shadow": tokens.shadow,
     }
 
 

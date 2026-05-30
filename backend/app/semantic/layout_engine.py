@@ -11,6 +11,7 @@ from app.semantic.contracts import (
     LayoutedPresentationDocument,
     LayoutedSlide,
     PresentationDocument,
+    ThemeDefinition,
 )
 
 
@@ -39,6 +40,15 @@ def _estimate_lines(text: str, width: int, font_size: int) -> int:
         return 0
     chars_per_line = _estimate_chars_per_line(width, font_size)
     return max(1, math.ceil(len(cleaned) / chars_per_line))
+
+
+def _fit_text_font(text: str, width: int, font_size: int) -> int:
+    minimum = max(12, round(font_size * 0.74))
+    max_lines = 3 if font_size >= 34 else 5
+    fitted = font_size
+    while fitted > minimum and _estimate_lines(text, width, fitted) > max_lines:
+        fitted -= 2
+    return fitted
 
 
 def _text_height(text: str, width: int, font_size: int, *, min_height: int = 0, padding_y: int = 0) -> tuple[int, int, int]:
@@ -76,6 +86,7 @@ def _text_element(
     content: dict | None = None,
     note: str | None = None,
 ) -> LayoutElement:
+    font_size = _fit_text_font(text, width, font_size)
     height, _, _ = _text_height(text, width, font_size, min_height=min_height)
     return LayoutElement(
         id=element_id,
@@ -103,6 +114,10 @@ def _slide_media(slide) -> dict | None:
     if isinstance(first, dict):
         return first
     return first.model_dump(mode="json") if hasattr(first, "model_dump") else None
+
+
+def _item_value(item, key: str, default=None):
+    return item.get(key, default) if isinstance(item, dict) else getattr(item, key, default)
 
 
 def _icon_key(text: str, index: int = 0) -> str:
@@ -214,6 +229,41 @@ def _panel_element(
             note=note,
         ),
     )
+
+
+def _cap_descendant_widths(parent: LayoutElement) -> None:
+    for child in parent.children:
+        child.width = min(child.width, max(1, parent.width - child.x))
+        _cap_descendant_widths(child)
+
+
+def _apply_theme_styles(element: LayoutElement, theme: ThemeDefinition) -> None:
+    styles = theme.tokens.component_styles
+    if element.kind == LayoutElementKind.PANEL:
+        panel_style = styles.get("panel", {})
+        element.content.update(panel_style)
+        if element.region != "media":
+            padding = int(panel_style.get("padding") or 0)
+            for child in element.children:
+                child.x += padding
+                child.y += padding
+                child.width = min(child.width, max(1, element.width - child.x - padding))
+                _cap_descendant_widths(child)
+    elif element.kind == LayoutElementKind.IMAGE:
+        element.content.update(styles.get("image", {}))
+    elif element.kind == LayoutElementKind.BULLET_ITEM:
+        element.content.update(styles.get("bullet", {}))
+
+    for child in element.children:
+        _apply_theme_styles(child, theme)
+
+
+def _apply_theme_to_slide(slide: LayoutedSlide, theme: ThemeDefinition) -> LayoutedSlide:
+    for element in slide.elements:
+        _apply_theme_styles(element, theme)
+    slide.debug["theme_id"] = theme.id
+    slide.debug["layout_style"] = theme.tokens.component_styles.get("background", {}).get("layout_style")
+    return slide
 
 
 def _layout_title_slide(slide) -> list[LayoutElement]:
@@ -503,13 +553,15 @@ def _layout_timeline_slide(slide) -> list[LayoutElement]:
         row_children: list[LayoutElement] = []
         label_font = 16
         detail_font = 16
-        label_h, _, _ = _text_height(step.label, label_width, label_font, min_height=24)
+        label = _item_value(step, "label", "")
+        detail = _item_value(step, "detail", "") or ""
+        label_h, _, _ = _text_height(label, label_width, label_font, min_height=24)
         detail_w = row_width - label_width - 28
-        detail_h, _, _ = _text_height(step.detail or "", detail_w, detail_font, min_height=24)
+        detail_h, _, _ = _text_height(detail, detail_w, detail_font, min_height=24)
         row_h = max(label_h, detail_h) + 28
-        row_children.append(_text_element(element_id=f"{slide.id}_step_{index + 1}_label", region=f"timeline.{index + 1}.label", x=0, y=0, width=label_width, text=step.label, font_size=label_font, align=Alignment.START, min_height=label_h, note="timeline label"))
-        if step.detail:
-            row_children.append(_text_element(element_id=f"{slide.id}_step_{index + 1}_detail", region=f"timeline.{index + 1}.detail", x=label_width + 28, y=0, width=detail_w, text=step.detail, font_size=detail_font, align=Alignment.START, min_height=detail_h, note="timeline detail"))
+        row_children.append(_text_element(element_id=f"{slide.id}_step_{index + 1}_label", region=f"timeline.{index + 1}.label", x=0, y=0, width=label_width, text=label, font_size=label_font, align=Alignment.START, min_height=label_h, note="timeline label"))
+        if detail:
+            row_children.append(_text_element(element_id=f"{slide.id}_step_{index + 1}_detail", region=f"timeline.{index + 1}.detail", x=label_width + 28, y=0, width=detail_w, text=detail, font_size=detail_font, align=Alignment.START, min_height=detail_h, note="timeline detail"))
         rows.append(_panel_element(element_id=f"{slide.id}_step_{index + 1}", region="timeline", x=MARGIN_X, y=y, width=row_width, height=row_h, children=row_children, note="timeline step"))
         y += row_h + 16
 
@@ -543,14 +595,17 @@ def _layout_statistics_slide(slide) -> list[LayoutElement]:
         label_font = 15
         detail_font = 14
         child_elements: list[LayoutElement] = []
-        value_h, _, _ = _text_height(stat.value, card_width - 40, value_font, min_height=44)
-        label_h, _, _ = _text_height(stat.label, card_width - 40, label_font, min_height=24)
-        child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 1}_value", region=f"stat.{index + 1}.value", x=0, y=0, width=card_width - 40, text=stat.value, font_size=value_font, align=Alignment.CENTER, min_height=value_h, note="stat value"))
-        child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 1}_label", region=f"stat.{index + 1}.label", x=0, y=value_h + 10, width=card_width - 40, text=stat.label, font_size=label_font, align=Alignment.CENTER, min_height=label_h, note="stat label"))
-        if stat.detail:
+        value = _item_value(stat, "value", "")
+        label = _item_value(stat, "label", "")
+        detail = _item_value(stat, "detail", "") or ""
+        value_h, _, _ = _text_height(value, card_width - 40, value_font, min_height=44)
+        label_h, _, _ = _text_height(label, card_width - 40, label_font, min_height=24)
+        child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 1}_value", region=f"stat.{index + 1}.value", x=0, y=0, width=card_width - 40, text=value, font_size=value_font, align=Alignment.CENTER, min_height=value_h, note="stat value"))
+        child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 1}_label", region=f"stat.{index + 1}.label", x=0, y=value_h + 10, width=card_width - 40, text=label, font_size=label_font, align=Alignment.CENTER, min_height=label_h, note="stat label"))
+        if detail:
             detail_y = value_h + label_h + 20
-            detail_h, _, _ = _text_height(stat.detail, card_width - 40, detail_font, min_height=22)
-            child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 1}_detail", region=f"stat.{index + 1}.detail", x=0, y=detail_y, width=card_width - 40, text=stat.detail, font_size=detail_font, align=Alignment.CENTER, min_height=detail_h, note="stat detail"))
+            detail_h, _, _ = _text_height(detail, card_width - 40, detail_font, min_height=22)
+            child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 1}_detail", region=f"stat.{index + 1}.detail", x=0, y=detail_y, width=card_width - 40, text=detail, font_size=detail_font, align=Alignment.CENTER, min_height=detail_h, note="stat detail"))
         elements.append(_panel_element(element_id=f"{slide.id}_stat_{index + 1}", region="statistics", x=x, y=y, width=card_width, height=card_height, children=child_elements, note="stat card"))
     return elements
 
@@ -619,10 +674,18 @@ def _layout_slide(slide, debug_mode: bool) -> LayoutedSlide:
     )
 
 
-def build_layouted_presentation(document: PresentationDocument, *, debug_mode: bool = False) -> LayoutedPresentationDocument:
+def build_layouted_presentation(
+    document: PresentationDocument,
+    *,
+    theme: ThemeDefinition | None = None,
+    debug_mode: bool = False,
+) -> LayoutedPresentationDocument:
+    slides = [_layout_slide(slide, debug_mode) for slide in document.slides]
+    if theme:
+        slides = [_apply_theme_to_slide(slide, theme) for slide in slides]
     return LayoutedPresentationDocument(
         title=document.title,
         version=document.version,
         metadata=document.metadata,
-        slides=[_layout_slide(slide, debug_mode) for slide in document.slides],
+        slides=slides,
     )

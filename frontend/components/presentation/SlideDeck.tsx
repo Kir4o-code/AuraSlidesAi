@@ -42,14 +42,15 @@ function SlideShell({
         padding: positioned ? 0 : `calc(2.5rem * ${tokens.spacingScale})`,
         background: `linear-gradient(145deg, ${tokens.background} 0%, ${tokens.backgroundAlt} 100%)`,
         borderColor: tokens.borderColor,
+        borderRadius: tokens.panelRadius + 8,
         boxShadow: tokens.shadow,
         color: tokens.textColor,
         fontFamily: tokens.bodyFontFamily,
       }}
     >
       <div
-        className="absolute inset-y-0 left-0 w-2"
-        style={{ background: `linear-gradient(180deg, ${tokens.accentColor}, ${tokens.accentSoftColor})` }}
+        className={`absolute ${tokens.accentPosition === "top" ? "inset-x-0 top-0 h-2" : "inset-y-0 left-0 w-2"}`}
+        style={{ background: `linear-gradient(135deg, ${tokens.accentColor}, ${tokens.accentSoftColor})` }}
       />
       <div
         className="absolute right-8 top-8 h-40 w-40 rounded-full blur-3xl opacity-50"
@@ -142,8 +143,7 @@ function LayoutElementRenderer({
           ...style,
           background: tokens.surface,
           border: `1px solid ${tokens.borderColor}`,
-          borderRadius: 24,
-          padding: 24,
+          borderRadius: tokens.panelRadius,
           boxShadow: tokens.shadow,
         }}
       >
@@ -151,7 +151,7 @@ function LayoutElementRenderer({
           <LayoutElementRenderer key={child.id} element={child} tokens={tokens} debug={debug} />
         ))}
         {debug ? (
-          <div className="pointer-events-none absolute inset-0 rounded-[24px] border border-dashed border-rose-500/70" />
+          <div className="pointer-events-none absolute inset-0 border border-dashed border-rose-500/70" style={{ borderRadius: tokens.panelRadius }} />
         ) : null}
       </div>
     );
@@ -165,13 +165,19 @@ function LayoutElementRenderer({
       <div
         style={{
           ...style,
-          borderRadius: 24,
+          padding: tokens.imageFrameInset,
+          borderRadius: tokens.imageRadius,
           border: `1px solid ${tokens.borderColor}`,
           background: `linear-gradient(180deg, ${tokens.surface}, ${tokens.backgroundAlt})`,
         }}
       >
         {imageUrl ? (
-          <img src={imageUrl} alt={alt} className="h-full w-full rounded-[24px] object-cover" />
+          <img
+            src={imageUrl}
+            alt={alt}
+            className="h-full w-full"
+            style={{ borderRadius: Math.max(tokens.imageRadius - tokens.imageFrameInset, 0), objectFit: tokens.imageFit }}
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center p-5 text-center text-sm leading-6" style={{ color: tokens.textColor }}>
             {(content.prompt as string | undefined) ?? alt}
@@ -200,14 +206,18 @@ function LayoutElementRenderer({
           alignItems: "flex-start",
           gap: 16,
           padding: 16,
-          borderRadius: 20,
+          borderRadius: tokens.panelRadius,
           border: `1px solid ${tokens.borderColor}`,
-          background: `${tokens.surface}d9`,
+          background: tokens.bulletStyle === "lines" ? tokens.backgroundAlt : `${tokens.surface}d9`,
         }}
       >
-        <span className="h-12 w-12 flex-none">
-          <DeckIcon icon={(content.icon as string | undefined) ?? "target"} tokens={tokens} />
-        </span>
+        {tokens.bulletStyle === "cards" ? (
+          <span className="h-12 w-12 flex-none">
+            <DeckIcon icon={(content.icon as string | undefined) ?? "target"} tokens={tokens} />
+          </span>
+        ) : (
+          <span className="mt-2 h-2.5 w-2.5 flex-none" style={{ background: tokens.accentColor }} />
+        )}
         <span style={{ flex: 1 }}>{element.text}</span>
       </div>
     );

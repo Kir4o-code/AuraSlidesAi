@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from app.schemas.presentation import GeneratePresentationRequest, GeneratePresentationResponse
+from app.schemas.presentation import GeneratePresentationRequest, GeneratePresentationResponse, ThemeName
 from app.services.gemini_service import (
     GeminiConfigurationError,
     GeminiImageGenerationError,
@@ -16,10 +16,16 @@ from app.services.gemini_service import (
 )
 from app.services.image_service import enrich_presentation_images
 from app.services.slide_generator import build_presentation_exports, prepare_export_bundle
+from app.services.theme_registry import list_theme_summaries, resolve_theme_name
 
 
 router = APIRouter(prefix="/presentations", tags=["presentations"])
 logger = logging.getLogger(__name__)
+
+
+@router.get("/templates")
+def list_presentation_templates() -> list[dict[str, object]]:
+    return list_theme_summaries()
 
 
 @router.post("/generate", response_model=GeneratePresentationResponse)
@@ -32,17 +38,22 @@ async def generate_presentation_route(
     layouted_presentation = None
     try:
         logger.info(
-            "[%s] Starting presentation generation. slide_count=%s style=%s prompt_chars=%s",
+            "[%s] Starting presentation generation. slide_count=%s style=%s template=%s planning_mode=%s prompt_chars=%s",
             request_id,
             payload.slide_count,
             payload.style,
+            payload.template,
+            payload.planning_mode,
             len(payload.prompt),
         )
         presentation = await generate_presentation(
             prompt=payload.prompt,
             slide_count=payload.slide_count,
             style=payload.style,
+            planning_mode=payload.planning_mode,
+            slide_outline=payload.slide_outline,
         )
+        presentation.theme = ThemeName(resolve_theme_name(payload.template))
         settings = get_settings()
         if settings.enable_image_generation:
             logger.info(
