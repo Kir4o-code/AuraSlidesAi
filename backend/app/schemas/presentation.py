@@ -107,6 +107,8 @@ class Slide(BaseModel):
     columns: int = Field(default=1, ge=1, le=3)
     image_prompt: str | None = Field(default=None, max_length=500)
     image_class: ImageClass | None = None
+    visual_mood: str | None = Field(default=None, max_length=120)
+    icon_intent: str | None = Field(default=None, max_length=120)
     notes: str | None = Field(default=None, max_length=500)
     left_title: str | None = Field(default=None, max_length=120)
     right_title: str | None = Field(default=None, max_length=120)
@@ -163,10 +165,20 @@ class GeneratePresentationRequest(BaseModel):
     prompt: str = Field(min_length=5, max_length=4000)
     slide_count: int = Field(default=5, ge=3, le=10)
     style: str = Field(default="modern", min_length=1, max_length=40)
+    template: ThemeName | None = None
+    image_source: ImageSource = ImageSource.GEMINI
+    planning_mode: PlanningMode = PlanningMode.AUTOMATIC
+    slide_outline: list[GuidedSlideIntent] | None = Field(default=None, min_length=3, max_length=10)
+
+    @model_validator(mode="after")
+    def validate_guided_outline(self) -> "GeneratePresentationRequest":
+        if self.planning_mode == PlanningMode.GUIDED and not self.slide_outline:
+            raise ValueError("Guided planning requires a slide outline.")
+        return self
 
 
 class GeneratePresentationResponse(BaseModel):
     presentation: Presentation
     layouted_presentation: LayoutedPresentationDocument | None = None
     pptx_url: str
-    pdf_url: str
+    pdf_url: str | None

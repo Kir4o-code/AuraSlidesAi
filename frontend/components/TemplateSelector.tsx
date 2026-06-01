@@ -1,5 +1,6 @@
 import type { ThemeName } from "@/lib/api";
 import { TEMPLATE_OPTIONS } from "@/lib/theme";
+import { FiCheck } from "react-icons/fi";
 
 interface TemplateSelectorProps {
   disabled?: boolean;
@@ -11,8 +12,8 @@ export function TemplateSelector({ disabled, value, onChange }: TemplateSelector
   return (
     <fieldset className="mb-5">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-        <legend className="text-sm font-medium text-slate-700">Template</legend>
-        <span className="text-xs text-slate-500">Hardcoded and export-safe</span>
+        <legend className="text-sm font-medium text-zinc-300">Template</legend>
+        <span className="text-xs text-zinc-500">Curated and export-safe</span>
       </div>
       <div className="grid max-h-[660px] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
         {TEMPLATE_OPTIONS.map((template) => {
@@ -24,14 +25,14 @@ export function TemplateSelector({ disabled, value, onChange }: TemplateSelector
               disabled={disabled}
               onClick={() => onChange(template.name)}
               aria-pressed={active}
-              className={`group rounded-2xl border p-3 text-left transition ${
+              className={`button-press interactive-outline sharp-control group p-3 text-left ${
                 active
-                  ? "border-spark bg-teal-50 shadow-sm ring-2 ring-spark/20"
-                  : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                  ? "[--control-bg:#18181b] shadow-[0_0_22px_rgba(34,211,238,0.08)]"
+                  : "[--control-bg:#0f0f11] hover:[--control-bg:#17171a]"
               } disabled:cursor-not-allowed disabled:opacity-60`}
             >
               <div
-                className="relative overflow-hidden rounded-xl border px-4 py-4"
+                className="sharp-control relative overflow-hidden border px-4 py-4"
                 style={{
                   borderColor: template.borderColor,
                   background: `linear-gradient(145deg, ${template.background}, ${template.backgroundAlt})`,
@@ -64,7 +65,7 @@ export function TemplateSelector({ disabled, value, onChange }: TemplateSelector
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span
-                      className="inline-flex rounded-full border px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.18em]"
+                      className="sharp-control inline-flex border px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.18em]"
                       style={{
                         borderColor: template.borderColor,
                         color: template.textColor,
@@ -85,23 +86,21 @@ export function TemplateSelector({ disabled, value, onChange }: TemplateSelector
               </div>
               <div className="mt-3 flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-ink">{template.displayName}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">{template.description}</p>
+                  <p className="text-sm font-semibold text-white">{template.displayName}</p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">{template.description}</p>
                 </div>
-                <span
-                  className={`mt-0.5 h-4 w-4 flex-none rounded-full border ${
-                    active ? "border-spark bg-spark" : "border-slate-300 bg-white"
-                  }`}
-                />
+                <span className={`sharp-control mt-0.5 flex h-5 w-5 flex-none items-center justify-center border ${active ? "border-cyan-200 bg-cyan-200 text-black" : "border-zinc-700 bg-black text-transparent"}`}>
+                  <FiCheck className="h-3 w-3" aria-hidden="true" />
+                </span>
               </div>
-              <p className="mt-2 text-[11px] leading-4 text-slate-500">
+              <p className="mt-2 text-[11px] leading-4 text-zinc-500">
                 Best for: {template.useCases.slice(0, 3).join(", ")}
               </p>
               <div className="mt-3 flex gap-1.5">
                 {template.palette.map((color) => (
                   <span
                     key={color}
-                    className="h-3 w-3 rounded-full border border-black/10"
+                    className="h-3 w-3 border border-black/10"
                     style={{ background: color }}
                   />
                 ))}

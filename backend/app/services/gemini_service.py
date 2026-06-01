@@ -70,6 +70,8 @@ class GeminiSlidePlan(BaseModel):
     bullets: list[str] = Field(default_factory=list)
     image_prompt: str | None = None
     image_class: str | None = None
+    visual_mood: str | None = None
+    icon_intent: str | None = None
     notes: str | None = None
     left_title: str | None = None
     right_title: str | None = None
@@ -106,6 +108,8 @@ GEMINI_PLANNING_JSON_SCHEMA: dict[str, Any] = {
                     "bullets": {"type": "array", "items": {"type": "string"}},
                     "image_prompt": {"type": "string"},
                     "image_class": {"type": "string"},
+                    "visual_mood": {"type": "string"},
+                    "icon_intent": {"type": "string"},
                     "notes": {"type": "string"},
                     "left_title": {"type": "string"},
                     "right_title": {"type": "string"},
@@ -161,6 +165,10 @@ CRITICAL RULES:
 7. VARIETY: Do not repeat the same slide structure mechanically. Use text-only, image-backed, comparison, timeline, statistics, hero, or quote layouts only when they fit the information.
 8. NO FILLER: Avoid generic phrases such as "key insights", "unlock potential", "embrace innovation", or restating the topic without adding information.
 9. GUIDED MODE: When ordered slide briefs are provided, follow each brief in order. Do not insert, remove, merge, or reorder slides.
+10. VOICE: Match the topic emotionally and write like a presenter with a point of view. Use tension for mysteries, curiosity for science, confidence for proposals, and warmth for personal assignments.
+11. OPINION: When the request asks for favorites, recommendations, or personal judgment, choose specific examples and explain why they stand out. Avoid generic praise.
+12. NARRATIVE: Give slides intentional roles such as hook, context, world or mechanism, evidence, comparison, favorite examples, personal take, and conclusion.
+13. METADATA: Set visual_mood to a short topic-specific art direction and icon_intent to a short semantic concept for each non-title slide.
 
 IMAGE PROMPT RULES (EXTREMELY IMPORTANT):
 - Image prompts must feel like they belong in a polished presentation, not an AI art gallery.
@@ -170,6 +178,7 @@ IMAGE PROMPT RULES (EXTREMELY IMPORTANT):
 - Do not ask for visible text, labels, captions, UI copy, or words inside the image unless the slide truly needs a simple chart-like visual.
 - For sensitive topics, keep visuals respectful, realistic, and non-sensational.
 - For every image-backed slide, set image_class to exactly one of: photo, diagram, illustration, icon.
+- Preserve named people, characters, places, works, objects, and events inside image prompts so external image research can search precisely.
 - Use photo for real people, places, objects, historical/documentary topics, or editorial visuals.
 - Use diagram for explanatory structures, systems, charts, flows, anatomy, maps, and timelines.
 - Use illustration for drawn/vector educational visuals that are not strict diagrams.
@@ -367,6 +376,8 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
     slide = GeminiSlidePlan.model_validate(slide.model_dump())
     slide.id = slide.id or f"slide_{index}"
     slide.type = _resolve_slide_type(slide.type).value
+    slide.visual_mood = _trim_text(slide.visual_mood, 120)
+    slide.icon_intent = _trim_text(slide.icon_intent, 120) or slide.title
 
     if slide.type == SlideType.TITLE_SLIDE.value:
         slide.title = slide.title or presentation_title
@@ -391,7 +402,7 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
             fallback=_fallback_bullets_for_slide(slide.title or presentation_title, presentation_title, variant="image", slot=index),
         )
         raw_image_prompt = slide.image_prompt
-        slide.image_class = _normalize_image_class(slide.image_class, " ".join(filter(None, [slide.title, raw_image_prompt])), default=ImageClass.ICON)
+        slide.image_class = _normalize_image_class(slide.image_class, " ".join(filter(None, [slide.title, raw_image_prompt])), default=ImageClass.PHOTO)
         slide.image_prompt = _normalize_image_prompt(raw_image_prompt, slide.title, presentation_title)
     elif slide.type == SlideType.HERO_IMAGE.value:
         slide.title = slide.title or "Visual focus"
@@ -605,6 +616,10 @@ CONTENT RULES:
 - Prioritize visual breathing room.
 - Make each slide add new information instead of repeating the topic.
 - Prefer a varied narrative rhythm. Do not turn every slide into title_bullets_image.
+- Adapt the voice to the subject and audience. Write with an intentional point of view.
+- When the brief asks for favorites or opinions, choose specific examples and explain the judgment.
+- For school assignments, stay clear and accurate but avoid lifeless textbook phrasing.
+- Add visual_mood and icon_intent metadata for every non-title slide.
 - Allowed slide types: title_slide, title_bullets, title_bullets_image, hero_image, comparison, timeline, statistics, quote.
 
 Preferred direction:

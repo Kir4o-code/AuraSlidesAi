@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { FiArrowLeft, FiArrowRight, FiCpu, FiImage, FiLayers, FiZap } from "react-icons/fi";
 
 import { GuidedSlidePlanner } from "@/components/GuidedSlidePlanner";
 import { TemplateSelector } from "@/components/TemplateSelector";
@@ -37,10 +38,10 @@ const INITIAL_GUIDED_SLIDES: GuidedSlideIntent[] = [
 ];
 
 const WIZARD_STEPS = [
-  { id: 1, title: "Prompt", subtitle: "Start with the idea" },
-  { id: 2, title: "Theme", subtitle: "Pick a visual style" },
-  { id: 3, title: "Planning", subtitle: "Choose automatic or guided" },
-  { id: 4, title: "Images", subtitle: "Set the image source" },
+  { id: 1, title: "Prompt", subtitle: "Start with the idea", icon: FiZap },
+  { id: 2, title: "Theme", subtitle: "Pick a visual style", icon: FiLayers },
+  { id: 3, title: "Planning", subtitle: "Shape the narrative", icon: FiCpu },
+  { id: 4, title: "Images", subtitle: "Set the visual source", icon: FiImage },
 ] as const;
 
 export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }: PromptFormProps) {
@@ -78,13 +79,13 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-[28px] border border-slate-200 bg-white/90 p-6 shadow-card backdrop-blur">
+    <form onSubmit={handleSubmit} className="surface-panel sharp-panel p-6">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-spark">Prompt flow</p>
-          <h2 className="mt-2 text-2xl font-semibold text-ink">Build the deck step by step</h2>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-200">Prompt flow</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">Build the deck step by step</h2>
         </div>
-        <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+        <div className="sharp-control flex items-center gap-2 border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-zinc-300">
           <span>{step}</span>
           <span>/</span>
           <span>{WIZARD_STEPS.length}</span>
@@ -95,23 +96,25 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
         {WIZARD_STEPS.map((item) => {
           const active = step === item.id;
           const complete = step > item.id;
+          const Icon = item.icon;
           return (
             <button
               key={item.id}
               type="button"
               disabled={isLoading}
               onClick={() => setStep(item.id)}
-              className={`rounded-2xl border px-3 py-3 text-left transition ${
+              className={`button-press interactive-outline sharp-control px-3 py-3 text-left ${
                 active
-                  ? "border-spark bg-teal-50 ring-2 ring-spark/15"
+                  ? "[--control-bg:#18181b] shadow-[0_0_22px_rgba(34,211,238,0.08)]"
                   : complete
-                    ? "border-emerald-200 bg-emerald-50/70 hover:bg-emerald-50"
-                    : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white"
+                    ? "[--control-bg:#141416] hover:[--control-bg:#19191c]"
+                    : "[--control-bg:#0f0f11] hover:[--control-bg:#17171a]"
               } disabled:cursor-not-allowed disabled:opacity-60`}
             >
-              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-500">Step {item.id}</p>
-              <p className="mt-1 text-sm font-semibold text-ink">{item.title}</p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">{item.subtitle}</p>
+              <Icon className={`h-4 w-4 ${active ? "text-cyan-200" : "text-zinc-500"}`} aria-hidden="true" />
+              <p className="mt-3 text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-zinc-500">Step {item.id}</p>
+              <p className="mt-1 text-sm font-semibold text-white">{item.title}</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-500">{item.subtitle}</p>
             </button>
           );
         })}
@@ -119,13 +122,13 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
 
       {step === 1 ? (
         <label className="block">
-          <span className="mb-2 block text-sm font-medium text-slate-700">Presentation brief</span>
+          <span className="mb-2 block text-sm font-medium text-zinc-300">Presentation brief</span>
           <textarea
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
             rows={8}
             required
-            className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-spark focus:bg-white"
+            className="sharp-control w-full border border-white/10 bg-black/35 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-zinc-600 focus:border-cyan-300/70 focus:bg-black/55"
             placeholder="Explain the topic, audience, and tone..."
           />
         </label>
@@ -135,7 +138,7 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
 
       {step === 3 ? (
         <fieldset className="mb-5">
-          <legend className="mb-2 block text-sm font-medium text-slate-700">Content planning</legend>
+          <legend className="mb-2 block text-sm font-medium text-zinc-300">Content planning</legend>
           <div className="grid gap-2 sm:grid-cols-2">
             {[
               {
@@ -157,37 +160,37 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
                   disabled={isLoading}
                   onClick={() => setPlanningMode(option.value)}
                   aria-pressed={active}
-                  className={`rounded-2xl border p-4 text-left transition ${
+                  className={`button-press interactive-outline sharp-control p-4 text-left ${
                     active
-                      ? "border-spark bg-teal-50 ring-2 ring-spark/15"
-                      : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white"
+                      ? "[--control-bg:#18181b]"
+                      : "[--control-bg:#0f0f11] hover:[--control-bg:#17171a]"
                   } disabled:opacity-60`}
                 >
-                  <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <span className="flex items-center gap-2 text-sm font-semibold text-white">
                     <span
                       className={`h-4 w-4 rounded-full border ${
-                        active ? "border-spark bg-spark shadow-[inset_0_0_0_3px_white]" : "border-slate-300 bg-white"
+                        active ? "border-cyan-200 bg-cyan-200 shadow-[inset_0_0_0_3px_#09090b]" : "border-zinc-600 bg-black"
                       }`}
                     />
                     {option.label}
                   </span>
-                  <span className="mt-2 block text-xs leading-5 text-slate-500">{option.description}</span>
+                  <span className="mt-2 block text-xs leading-5 text-zinc-500">{option.description}</span>
                 </button>
               );
             })}
           </div>
 
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="sharp-control mt-4 border border-white/10 bg-black/25 p-4">
             {planningMode === "automatic" ? (
               <label className="block">
-                <span className="mb-2 block text-sm font-medium text-slate-700">Slide count</span>
+                <span className="mb-2 block text-sm font-medium text-zinc-300">Slide count</span>
                 <input
                   type="number"
                   min={3}
                   max={10}
                   value={slideCount}
                   onChange={(event) => setSlideCount(Number(event.target.value))}
-                  className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm outline-none transition focus:border-spark focus:bg-white"
+                  className="sharp-control w-full border border-white/10 bg-black/35 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/70"
                 />
               </label>
             ) : (
@@ -199,7 +202,7 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
 
       {step === 4 ? (
         <fieldset>
-          <legend className="mb-2 block text-sm font-medium text-slate-700">Presentation images</legend>
+          <legend className="mb-2 block text-sm font-medium text-zinc-300">Presentation images</legend>
           <div className="grid gap-2 sm:grid-cols-2">
             {IMAGE_SOURCE_OPTIONS.map((option) => {
               const active = imageSource === option.value;
@@ -209,10 +212,10 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
                   type="button"
                   disabled={isLoading}
                   onClick={() => setImageSource(option.value)}
-                  className={`rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
+                  className={`button-press interactive-outline sharp-control px-4 py-3 text-sm font-semibold ${
                     active
-                      ? "border-ink bg-ink text-white"
-                      : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-white disabled:opacity-60"
+                      ? "[--control-bg:#18181b] text-white"
+                      : "[--control-bg:#0f0f11] text-zinc-400 hover:[--control-bg:#17171a] disabled:opacity-60"
                   }`}
                   aria-pressed={active}
                 >
@@ -229,8 +232,9 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
           type="button"
           disabled={isLoading || step === 1}
           onClick={goBack}
-          className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="button-press interactive-outline sharp-control inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-semibold text-zinc-300 [--control-bg:#101012] hover:[--control-bg:#18181b] disabled:cursor-not-allowed disabled:opacity-50"
         >
+          <FiArrowLeft className="h-4 w-4" aria-hidden="true" />
           Back
         </button>
 
@@ -238,8 +242,9 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
           <button
             type="submit"
             disabled={isLoading}
-            className="inline-flex items-center justify-center rounded-full bg-ink px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="button-press interactive-outline sharp-control inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-semibold text-white [--control-bg:#18181b] hover:[--control-bg:#202024] disabled:cursor-not-allowed disabled:opacity-60"
           >
+            <FiZap className="h-4 w-4" aria-hidden="true" />
             {isLoading ? "Generating..." : "Generate presentation"}
           </button>
         ) : (
@@ -247,21 +252,22 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
             type="button"
             disabled={isLoading}
             onClick={goNext}
-            className="inline-flex items-center justify-center rounded-full bg-ink px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="button-press interactive-outline sharp-control inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-semibold text-white [--control-bg:#18181b] hover:[--control-bg:#202024] disabled:cursor-not-allowed disabled:opacity-60"
           >
             Next
+            <FiArrowRight className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
       </div>
 
       {isLoading ? (
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="sharp-control mt-5 border border-white/10 bg-white/[0.03] p-4">
           <div className="flex items-center justify-between gap-4 text-sm">
-            <span className="font-medium text-slate-700">{progressLabel}</span>
-            <span className="font-semibold text-ink">{progressValue}%</span>
+            <span className="font-medium text-zinc-300">{progressLabel}</span>
+            <span className="font-semibold text-white">{progressValue}%</span>
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
-            <div className="h-full rounded-full bg-spark transition-all duration-500" style={{ width: `${progressValue}%` }} />
+          <div className="mt-3 h-2 overflow-hidden bg-white/10">
+            <div className="h-full bg-white transition-all duration-500" style={{ width: `${progressValue}%` }} />
           </div>
         </div>
       ) : null}

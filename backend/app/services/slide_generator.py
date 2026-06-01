@@ -1,5 +1,7 @@
 import logging
 import os
+import re
+import unicodedata
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -212,15 +214,27 @@ def render_presentation_html(presentation: Presentation) -> str:
 from app.services.exporters import build_presentation_exports as run_exporters
 
 
-def build_presentation_exports(presentation: Presentation) -> tuple[str, str]:
-    asset_id = uuid4().hex
+def _build_asset_id(title: str) -> str:
+    words = re.findall(r"\w+", unicodedata.normalize("NFKD", title), flags=re.UNICODE)
+    slug = "-".join(words).strip("-_").lower()[:64].strip("-_")
+    return f"{slug or 'presentation'}-{uuid4().hex[:8]}"
+
+
+def build_presentation_exports(presentation: Presentation) -> tuple[str, str | None]:
+    asset_id = _build_asset_id(presentation.title)
     exporter_type = os.getenv("EXPORTER_TYPE", "native")
     layouted_document, semantic_theme = prepare_export_bundle(presentation)
 
     logger.info("Starting presentation export. asset_id=%s exporter=%s", asset_id, exporter_type)
-    return run_exporters(layouted_document, semantic_theme, asset_id, exporter_type=exporter_type)
+    return run_exporters(
+        layouted_document,
+        semantic_theme,
+        asset_id,
+        exporter_type=exporter_type,
+        browser_fallback_presentation=presentation,
+    )
 
 
-def build_pdf(presentation: Presentation) -> str:
+def build_pdf(presentation: Presentation) -> str | None:
     _, pdf_name = build_presentation_exports(presentation)
     return pdf_name

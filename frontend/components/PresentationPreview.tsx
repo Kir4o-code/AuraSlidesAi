@@ -1,4 +1,5 @@
 import type { GeneratePresentationResponse, ProgressState } from "@/lib/api";
+import { FiAlertTriangle, FiDownload, FiFileText, FiLoader, FiMonitor } from "react-icons/fi";
 
 import { SlideDeck } from "@/components/presentation/SlideDeck";
 import { resolveThemeTokens } from "@/lib/theme";
@@ -20,8 +21,9 @@ export function PresentationPreview({
 }: PresentationPreviewProps) {
   if (error) {
     return (
-      <div className="rounded-[28px] border border-rose-200 bg-rose-50 p-6 text-rose-700 shadow-card">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em]">
+      <div className="surface-panel sharp-panel p-6 text-rose-200">
+        <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em]">
+          <FiAlertTriangle className="h-4 w-4" aria-hidden="true" />
           Error
         </p>
         <p className="mt-3 text-sm leading-6">{error}</p>
@@ -31,19 +33,23 @@ export function PresentationPreview({
 
   if (!result) {
     return (
-      <div className="rounded-[28px] border border-dashed border-slate-300 bg-white/70 p-6 text-slate-500 shadow-card">
-        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-spark">
+      <div className="surface-panel sharp-panel p-6 text-zinc-500">
+        <p className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-cyan-200">
+          <FiMonitor className="h-4 w-4" aria-hidden="true" />
           Preview
         </p>
         {isLoading ? (
           <>
-            <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-200">
+            <div className="mt-4 h-3 overflow-hidden bg-white/10">
               <div
-                className="h-full rounded-full bg-spark transition-all duration-500"
+                className="h-full bg-white transition-all duration-500"
                 style={{ width: `${progress.value}%` }}
               />
             </div>
-            <p className="mt-4 text-sm font-medium text-ink">{progress.label}</p>
+            <p className="mt-4 flex items-center gap-2 text-sm font-medium text-white">
+              <FiLoader className="h-4 w-4 animate-spin text-cyan-200" aria-hidden="true" />
+              {progress.label}
+            </p>
             <div className="mt-4 space-y-3">
               {progress.stages.map((stage, index) => {
                 const isComplete = index < progress.stageIndex;
@@ -52,12 +58,12 @@ export function PresentationPreview({
                 return (
                   <div
                     key={stage}
-                    className={`rounded-2xl border px-4 py-3 text-sm transition ${
+                    className={`sharp-control border px-4 py-3 text-sm transition ${
                       isActive
-                        ? "border-teal-300 bg-teal-50 text-ink"
+                        ? "border-cyan-300/50 bg-cyan-300/10 text-white"
                         : isComplete
-                          ? "border-slate-200 bg-white text-slate-600"
-                          : "border-slate-200 bg-white/70 text-slate-400"
+                          ? "border-white/15 bg-white/[0.07] text-zinc-300"
+                          : "border-white/10 bg-white/[0.03] text-zinc-600"
                     }`}
                   >
                     {stage}
@@ -68,8 +74,7 @@ export function PresentationPreview({
           </>
         ) : (
           <p className="mt-3 text-sm leading-6">
-            Generated presentation JSON and the PDF download link will appear
-            here.
+            Your generated deck, export links, and slide navigator appear here.
           </p>
         )}
       </div>
@@ -77,13 +82,13 @@ export function PresentationPreview({
   }
 
   return (
-    <div className="rounded-[28px] border border-slate-200 bg-white/90 p-6 shadow-card backdrop-blur">
-      <div className="flex flex-col gap-3 border-b border-slate-200 pb-5 md:flex-row md:items-center md:justify-between">
+    <div className="surface-panel sharp-panel p-6">
+      <div className="flex flex-col gap-3 border-b border-white/10 pb-5 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-spark">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-200">
             Result
           </p>
-          <h2 className="mt-2 text-2xl font-semibold text-ink">
+          <h2 className="mt-2 text-2xl font-semibold tracking-[-0.04em] text-white">
             {result.presentation.title}
           </h2>
         </div>
@@ -93,49 +98,57 @@ export function PresentationPreview({
             href={result.pptx_url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-ink transition hover:border-slate-400 hover:bg-slate-50"
+            className="button-press interactive-outline sharp-control inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white [--control-bg:#101012] hover:[--control-bg:#18181b]"
           >
+            <FiDownload className="h-4 w-4" aria-hidden="true" />
             Download PPTX
           </a>
-          <a
-            href={result.pdf_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center justify-center rounded-full border border-slate-300 px-5 py-3 text-sm font-semibold text-ink transition hover:border-slate-400 hover:bg-slate-50"
-          >
-            Download PDF
-          </a>
+          {result.pdf_url ? (
+            <a
+              href={result.pdf_url}
+              target="_blank"
+              rel="noreferrer"
+              className="button-press interactive-outline sharp-control inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white [--control-bg:#18181b] hover:[--control-bg:#202024]"
+            >
+              <FiFileText className="h-4 w-4" aria-hidden="true" />
+              Download PDF
+            </a>
+          ) : (
+            <span className="sharp-control inline-flex items-center justify-center border border-white/10 px-4 py-2.5 text-sm font-semibold text-zinc-600">
+              PDF unavailable
+            </span>
+          )}
         </div>
       </div>
 
       <div className="mt-5 grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+        <div className="sharp-control border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-500">
             Theme
           </p>
-          <p className="mt-2 text-sm font-medium text-ink">
+          <p className="mt-2 text-sm font-medium text-white">
             {result.presentation.theme}
           </p>
         </div>
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+        <div className="sharp-control border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-500">
             Background
           </p>
-          <p className="mt-2 text-sm font-medium text-ink">
+          <p className="mt-2 text-sm font-medium text-white">
             {resolveThemeTokens(result.presentation.theme).background}
           </p>
         </div>
-        <div className="rounded-2xl bg-slate-50 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">
+        <div className="sharp-control border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-zinc-500">
             Font
           </p>
-          <p className="mt-2 text-sm font-medium text-ink">
+          <p className="mt-2 text-sm font-medium text-white">
             {resolveThemeTokens(result.presentation.theme).fontFamily}
           </p>
         </div>
       </div>
 
-      <div className="mt-6 rounded-[30px] border border-slate-200 bg-slate-50 p-4">
+      <div className="sharp-panel mt-6 border border-white/10 bg-black/30 p-3">
         <SlideDeck presentation={result.presentation} layoutedPresentation={result.layouted_presentation ?? null} />
       </div>
     </div>

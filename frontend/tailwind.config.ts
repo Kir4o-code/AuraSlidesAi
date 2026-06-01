@@ -9,13 +9,13 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#0f172a",
-        mist: "#e2e8f0",
-        spark: "#0f766e",
-        skywash: "#eff6ff",
+        ink: "#f8fafc",
+        mist: "#27272a",
+        spark: "#67e8f9",
+        skywash: "#09090b",
       },
       boxShadow: {
-        card: "0 24px 60px rgba(15, 23, 42, 0.12)",
+        card: "0 24px 80px rgba(0, 0, 0, 0.42)",
       },
     },
   },

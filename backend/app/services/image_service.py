@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -38,10 +40,6 @@ def _image_slides(presentation: Presentation) -> list[Any]:
             SlideType.TITLE_BULLETS_IMAGE,
             SlideType.HERO_IMAGE,
         }
-        and not (
-            getattr(slide, "type", None) == SlideType.TITLE_BULLETS_IMAGE
-            and getattr(slide, "image_class", None) == ImageClass.ICON
-        )
     ]
 
 
@@ -56,12 +54,24 @@ def _infer_research_image_type(prompt: str) -> str:
     return "any"
 
 
-def _research_prompt(slide: Any) -> str:
+def _research_prompt(slide: Any, presentation_title: str) -> str:
     title = (getattr(slide, "title", None) or "").strip()
     prompt = (getattr(slide, "image_prompt", None) or "").strip()
-    if title and title.lower() not in prompt.lower():
-        prompt = f"{title}. {prompt}"
-    return " ".join(prompt.split())[:500]
+    mood = (getattr(slide, "visual_mood", None) or "").strip()
+    bullets = [str(item).strip() for item in (getattr(slide, "bullets", None) or []) if str(item).strip()]
+    context = " ".join([presentation_title, title, *bullets, prompt]).lower()
+    intent = ""
+    if any(term in context for term in ("series", "movie", "film", "episode", "character", "cast", "show")):
+        intent = "official still"
+    elif any(term in context for term in ("place", "town", "location", "building", "object", "artifact")):
+        intent = "official image"
+    parts = [title, presentation_title, *bullets[:2], prompt, mood, intent]
+    unique: list[str] = []
+    for part in parts:
+        cleaned = " ".join(part.split()).rstrip(" .,:;")
+        if cleaned and cleaned.lower() not in {value.lower() for value in unique}:
+            unique.append(cleaned)
+    return ". ".join(unique)[:500]
 
 
 def _resolved_from_research_image(
@@ -117,11 +127,12 @@ async def _resolve_one_slide_image(slide: Any, style: str) -> None:
 
 async def _resolve_one_research_image(
     slide: Any,
+    presentation_title: str,
     style: str,
     used_source_urls: set[str],
     used_hashes: set[str],
 ) -> None:
-    prompt = _research_prompt(slide)
+    prompt = _research_prompt(slide, presentation_title)
     if not prompt:
         return
 
@@ -172,31 +183,41 @@ async def enrich_presentation_images(
     logger.info(
         "Image enrichment starting. image_slide_count=%s source=%s model=%s",
         len(image_slides),
-        image_source,
+        image_source.value,
         get_image_model_name(),
     )
 
     failures: list[str] = []
     used_source_urls: set[str] = set()
     used_hashes: set[str] = set()
-    for slide in image_slides:
+    async def resolve(slide: Any) -> None:
         try:
             if image_source == ImageSource.IMAGE_RESEARCH:
-                try:
-                    await _resolve_one_research_image(slide, presentation.theme, used_source_urls, used_hashes)
-                except ImageResearchResolutionError as exc:
-                    logger.warning("Image research fallback to Gemini. error=%s", exc)
-                    await _resolve_one_slide_image(slide, presentation.theme)
+                await _resolve_one_research_image(slide, presentation.title, presentation.theme, used_source_urls, used_hashes)
             else:
                 await _resolve_one_slide_image(slide, presentation.theme)
         except (GeminiImageGenerationError, ImageResearchResolutionError) as exc:
             failures.append(str(exc))
 
+    if image_source == ImageSource.GEMINI:
+        concurrency = max(1, int(os.getenv("GEMINI_IMAGE_CONCURRENCY", "3")))
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def resolve_gemini(slide: Any) -> None:
+            async with semaphore:
+                await resolve(slide)
+
+        await asyncio.gather(*(resolve_gemini(slide) for slide in image_slides))
+    else:
+        for slide in image_slides:
+            await resolve(slide)
+
     if failures:
-        label = "Image research" if image_source == ImageSource.IMAGE_RESEARCH else "Gemini image generation"
-        raise GeminiImageGenerationError(
-            f"{label} failed for "
-            f"{len(failures)} slide(s): " + " | ".join(failures[:3])
+        logger.warning(
+            "Image enrichment completed with unresolved slides. source=%s unresolved=%s errors=%s",
+            image_source.value,
+            len(failures),
+            " | ".join(failures[:3]),
         )
 
     logger.info("Image enrichment complete. resolved_images=%s", sum(1 for slide in image_slides if slide.resolved_image))

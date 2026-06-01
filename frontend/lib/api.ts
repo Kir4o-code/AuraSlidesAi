@@ -124,6 +124,8 @@ export interface PresentationSlide {
   subtitle?: string | null;
   bullets?: string[];
   image_prompt?: string | null;
+  visual_mood?: string | null;
+  icon_intent?: string | null;
   notes?: string | null;
   left_title?: string | null;
   right_title?: string | null;
@@ -156,7 +158,7 @@ export interface GeneratePresentationResponse {
   presentation: Presentation;
   layouted_presentation?: LayoutedPresentationDocument | null;
   pptx_url: string;
-  pdf_url: string;
+  pdf_url: string | null;
 }
 
 export interface ProgressState {
@@ -215,8 +217,8 @@ const PROGRESS_STAGES = [
   { label: "Sending prompt to the backend", value: 10 },
   { label: "Planning slides with Gemini", value: 34 },
   { label: "Validating JSON with Pydantic", value: 58 },
-  { label: "Generating slide images with Gemini", value: 76 },
-  { label: "Exporting the PDF", value: 92 },
+  { label: "Resolving slide images", value: 76 },
+  { label: "Exporting PPTX and PDF", value: 92 },
 ];
 
 export function createInitialProgress(): ProgressState {

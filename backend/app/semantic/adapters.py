@@ -82,6 +82,8 @@ def presentation_to_document(presentation: Presentation) -> PresentationDocument
                 "subtitle": slide.subtitle,
                 "bullets": list(slide.bullets),
                 "image_prompt": slide.image_prompt,
+                "visual_mood": slide.visual_mood,
+                "icon_intent": slide.icon_intent,
                 "notes": slide.notes,
                 "left_title": slide.left_title,
                 "right_title": slide.right_title,

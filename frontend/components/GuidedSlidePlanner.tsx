@@ -1,4 +1,5 @@
 import type { GuidedSlideIntent, SlideType } from "@/lib/api";
+import { FiPlus, FiTrash2 } from "react-icons/fi";
 
 interface GuidedSlidePlannerProps {
   disabled?: boolean;
@@ -38,53 +39,54 @@ export function GuidedSlidePlanner({ disabled, slides, onChange }: GuidedSlidePl
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+    <section className="sharp-control border border-white/10 bg-white/[0.03] p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-ink">Build the story slide by slide</p>
-          <p className="mt-1 text-xs leading-5 text-slate-500">
+          <p className="text-sm font-semibold text-white">Build the story slide by slide</p>
+          <p className="mt-1 text-xs leading-5 text-zinc-500">
             Give each slide one job. AI expands the note into concise presentation content.
           </p>
         </div>
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+        <span className="sharp-control border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-zinc-300">
           {slides.length} slides
         </span>
       </div>
 
       <div className="mt-4 grid gap-3">
         {slides.map((slide, index) => (
-          <article key={index} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <article key={index} className="sharp-control border border-white/10 bg-black/30 p-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-spark">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-200">
                 Slide {index + 1}
               </p>
               <button
                 type="button"
                 disabled={disabled || slides.length <= 3}
                 onClick={() => removeSlide(index)}
-                className="text-xs font-semibold text-slate-400 transition hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-30"
+                className="button-press interactive-outline sharp-control inline-flex items-center gap-1.5 px-2 py-1 text-xs font-semibold text-zinc-400 [--control-bg:#101012] hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-30"
               >
+                <FiTrash2 className="h-3.5 w-3.5" aria-hidden="true" />
                 Remove
               </button>
             </div>
             <label className="mt-3 block">
-              <span className="mb-1.5 block text-xs font-medium text-slate-600">What should this slide accomplish?</span>
+              <span className="mb-1.5 block text-xs font-medium text-zinc-400">What should this slide accomplish?</span>
               <textarea
                 value={slide.purpose}
                 onChange={(event) => updateSlide(index, { purpose: event.target.value })}
                 rows={3}
                 required
                 disabled={disabled}
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 outline-none transition focus:border-spark focus:bg-white"
+                className="sharp-control w-full border border-white/10 bg-black/35 px-3 py-2 text-sm leading-6 text-white outline-none transition focus:border-cyan-300/70"
               />
             </label>
             <label className="mt-3 block">
-              <span className="mb-1.5 block text-xs font-medium text-slate-600">Layout preference</span>
+              <span className="mb-1.5 block text-xs font-medium text-zinc-400">Layout preference</span>
               <select
                 value={slide.requested_type ?? ""}
                 onChange={(event) => updateSlide(index, { requested_type: (event.target.value || null) as SlideType | null })}
                 disabled={disabled}
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-spark"
+                className="sharp-control w-full border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 outline-none transition focus:border-cyan-300/70"
               >
                 {SLIDE_TYPE_OPTIONS.map((option) => (
                   <option key={option.value || "automatic"} value={option.value}>
@@ -101,9 +103,9 @@ export function GuidedSlidePlanner({ disabled, slides, onChange }: GuidedSlidePl
         type="button"
         disabled={disabled || slides.length >= 10}
         onClick={addSlide}
-        className="mt-4 inline-flex items-center gap-2 rounded-full border border-dashed border-spark/60 bg-white px-4 py-2 text-sm font-semibold text-spark transition hover:border-spark hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-40"
+        className="button-press interactive-outline sharp-control mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-cyan-200 [--control-bg:#101012] hover:[--control-bg:#18181b] disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <span className="text-lg leading-none">+</span>
+        <FiPlus className="h-4 w-4" aria-hidden="true" />
         Add slide
       </button>
     </section>

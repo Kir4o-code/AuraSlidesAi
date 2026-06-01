@@ -12,6 +12,7 @@ from app.semantic.contracts import (
     LayoutedSlide,
     PresentationDocument,
 )
+from app.semantic.icons import choose_semantic_icon
 
 
 CANVAS_WIDTH = 1280
@@ -20,6 +21,7 @@ MARGIN_X = 80
 MARGIN_Y = 72
 GRID_GAP = 24
 TEXT_LINE_HEIGHT = 1.18
+PANEL_PADDING = 18
 
 
 def _scale_spacing(value: int | float, spacing_scale: float) -> int:
@@ -135,6 +137,26 @@ def _slide_media(slide) -> dict | None:
     return first.model_dump(mode="json") if hasattr(first, "model_dump") else None
 
 
+def _image_content(slide, media: dict | None) -> dict:
+    metadata = (media or {}).get("metadata") or {}
+    image_class = metadata.get("image_class")
+    width = metadata.get("width")
+    height = metadata.get("height")
+    fit = "contain" if image_class in {"icon", "diagram"} or (width and height and width / max(height, 1) < 0.9) else "cover"
+    return {
+        "image": True,
+        "src": (media or {}).get("public_url") or (media or {}).get("local_path"),
+        "local_path": (media or {}).get("local_path"),
+        "alt": (media or {}).get("alt") or slide.image_prompt or slide.title or slide.id,
+        "prompt": (media or {}).get("prompt") or slide.image_prompt,
+        "fit": fit,
+    }
+
+
+def _content_bottom(children: list[LayoutElement]) -> int:
+    return max((child.y + child.height for child in children), default=0)
+
+
 def _bullet_list_element(
     *,
     element_id: str,
@@ -145,12 +167,20 @@ def _bullet_list_element(
     bullets: list[str],
     font_size: int,
     align: Alignment = Alignment.START,
+    max_height: int | None = None,
+    icon_context: str = "",
 ) -> LayoutElement:
+    def list_height(size: int) -> int:
+        return sum(max(_text_height(bullet, width - 58, size)[0] + 14, 40) + 12 for bullet in bullets)
+
+    while font_size > 15 and max_height is not None and list_height(font_size) > max_height:
+        font_size -= 1
+
     child_y = y
     children: list[LayoutElement] = []
     for index, bullet in enumerate(bullets):
-        item_height, _, _ = _text_height(bullet, width - 40, font_size)
-        item_height = max(item_height + 16, 42)
+        item_height, _, _ = _text_height(bullet, width - 58, font_size)
+        item_height = max(item_height + 14, 40)
         children.append(
             LayoutElement(
                 id=f"{element_id}_item_{index + 1}",
@@ -165,11 +195,11 @@ def _bullet_list_element(
                 font_size=font_size,
                 line_height=TEXT_LINE_HEIGHT,
                 text=bullet,
-                content={"bullet": True, "index": index},
-                debug=_make_debug(bullet, width - 40, font_size, 0, 0, "bullet item"),
+                content={"bullet": True, "index": index, "icon": choose_semantic_icon(f"{icon_context} {bullet}", role=region, index=index)},
+                debug=_make_debug(bullet, width - 58, font_size, 0, 0, "bullet item"),
             )
         )
-        child_y += item_height + 16
+        child_y += item_height + 12
 
     total_height = max(1, child_y - y)
     return LayoutElement(
@@ -188,8 +218,8 @@ def _bullet_list_element(
         children=children,
         debug=LayoutDebugInfo(
             content_length=sum(len(item) for item in bullets),
-            estimated_lines=sum(max(1, _estimate_lines(item, width - 40, font_size)) for item in bullets),
-            estimated_chars_per_line=_estimate_chars_per_line(width - 40, font_size),
+            estimated_lines=sum(max(1, _estimate_lines(item, width - 58, font_size)) for item in bullets),
+            estimated_chars_per_line=_estimate_chars_per_line(width - 58, font_size),
             spacing_before=0,
             spacing_after=0,
             note="bullet list",
@@ -208,6 +238,27 @@ def _panel_element(
     children: list[LayoutElement],
     note: str,
 ) -> LayoutElement:
+    def inset(child: LayoutElement) -> LayoutElement:
+        available_width = max(1, width - (PANEL_PADDING * 2) - child.x)
+        available_height = max(1, height - (PANEL_PADDING * 2) - child.y)
+        child_width = min(child.width, available_width)
+        child_height = min(child.height, available_height)
+        nested = child.children
+        if child.kind == LayoutElementKind.BULLET_LIST:
+            nested = [
+                item.model_copy(update={"width": min(item.width, child_width)})
+                for item in child.children
+            ]
+        return child.model_copy(
+            update={
+                "x": child.x + PANEL_PADDING,
+                "y": child.y + PANEL_PADDING,
+                "width": child_width,
+                "height": child_height,
+                "children": nested,
+            }
+        )
+
     return LayoutElement(
         id=element_id,
         kind=LayoutElementKind.PANEL,
@@ -218,8 +269,8 @@ def _panel_element(
         height=height,
         align=Alignment.START,
         wrap=False,
-        content={"panel": True},
-        children=children,
+        content={"panel": True, "padding": PANEL_PADDING},
+        children=[inset(child) for child in children],
         debug=LayoutDebugInfo(
             content_length=sum(child.debug.content_length if child.debug else 0 for child in children),
             estimated_lines=sum(child.debug.estimated_lines if child.debug else 0 for child in children),
@@ -278,7 +329,7 @@ def _layout_bullets_slide(slide, spacing_scale: float) -> list[LayoutElement]:
 
     bullets = slide.bullets or []
     body_y = max(y, 224)
-    bullet_list = _bullet_list_element(element_id=f"{slide.id}_bullets", region="body", x=MARGIN_X, y=body_y, width=width, bullets=bullets, font_size=bullet_font)
+    bullet_list = _bullet_list_element(element_id=f"{slide.id}_bullets", region="body", x=MARGIN_X, y=body_y, width=width, bullets=bullets, font_size=bullet_font, max_height=CANVAS_HEIGHT - body_y - 54, icon_context=f"{slide.title or ''} {getattr(slide, 'icon_intent', '') or ''}")
     elements.append(bullet_list)
     y = body_y + bullet_list.height + _gap(22, spacing_scale, 16)
 
@@ -299,25 +350,29 @@ def _layout_image_bullets_slide(slide, spacing_scale: float) -> list[LayoutEleme
     bullet_font = 20
     notes_font = 16
     title_y = 90
+    inner_width = left_width - (PANEL_PADDING * 2)
+    inner_height = 548 - (PANEL_PADDING * 2)
 
     left_children: list[LayoutElement] = []
     if slide.title:
-        title_height, _, _ = _text_height(slide.title, left_width, title_font, min_height=68, padding_y=4)
+        title_height, _, _ = _text_height(slide.title, inner_width, title_font, min_height=68, padding_y=4)
         title_gap = _gap(24, spacing_scale, 16)
-        left_children.append(_text_element(element_id=f"{slide.id}_title", region="title", x=0, y=0, width=left_width, text=slide.title, font_size=title_font, align=Alignment.START, min_height=title_height, spacing_after=title_gap, note="title"))
+        left_children.append(_text_element(element_id=f"{slide.id}_title", region="title", x=0, y=0, width=inner_width, text=slide.title, font_size=title_font, align=Alignment.START, min_height=title_height, spacing_after=title_gap, note="title"))
         offset_y = title_height + title_gap
     else:
         offset_y = 0
 
-    bullet_list = _bullet_list_element(element_id=f"{slide.id}_bullets", region="body", x=0, y=max(offset_y, 196), width=left_width, bullets=slide.bullets or [], font_size=bullet_font)
+    bullet_y = max(offset_y, 112)
+    notes_height = _text_height(slide.notes or "", inner_width, notes_font, min_height=26)[0] if slide.notes else 0
+    notes_reserve = notes_height + _gap(18, spacing_scale, 12) if slide.notes else 0
+    bullet_list = _bullet_list_element(element_id=f"{slide.id}_bullets", region="body", x=0, y=bullet_y, width=inner_width, bullets=slide.bullets or [], font_size=bullet_font, max_height=max(120, inner_height - bullet_y - notes_reserve), icon_context=f"{slide.title or ''} {getattr(slide, 'icon_intent', '') or ''}")
     left_children.append(bullet_list)
-    offset_y = max(offset_y, 196) + bullet_list.height + _gap(14, spacing_scale, 10)
+    offset_y = bullet_y + bullet_list.height + _gap(18, spacing_scale, 12)
 
     if slide.notes:
-        notes_height, _, _ = _text_height(slide.notes, left_width, notes_font, min_height=26)
-        left_children.append(_text_element(element_id=f"{slide.id}_notes", region="notes", x=0, y=max(offset_y, 450), width=left_width, text=slide.notes, font_size=notes_font, align=Alignment.START, min_height=notes_height, note="notes"))
+        left_children.append(_text_element(element_id=f"{slide.id}_notes", region="notes", x=0, y=offset_y, width=inner_width, text=slide.notes, font_size=notes_font, align=Alignment.START, min_height=notes_height, note="notes"))
 
-    left_height = max(520, sum(child.height + 18 for child in left_children))
+    left_height = min(CANVAS_HEIGHT - title_y - 42, max(500, _content_bottom(left_children) + (PANEL_PADDING * 2)))
     elements.append(_panel_element(element_id=f"{slide.id}_left", region="body", x=left_x, y=title_y, width=left_width, height=left_height, children=left_children, note="left text column"))
 
     image_height = 460
@@ -330,17 +385,11 @@ def _layout_image_bullets_slide(slide, spacing_scale: float) -> list[LayoutEleme
             region="media",
             x=0,
             y=0,
-            width=right_width,
-            height=image_height,
+            width=right_width - (PANEL_PADDING * 2),
+            height=image_height - (PANEL_PADDING * 2),
             align=Alignment.CENTER,
             wrap=False,
-            content={
-                "image": True,
-                "src": (media or {}).get("public_url") or (media or {}).get("local_path"),
-                "local_path": (media or {}).get("local_path"),
-                "alt": (media or {}).get("alt") or slide.image_prompt or slide.title or slide.id,
-                "prompt": (media or {}).get("prompt") or slide.image_prompt,
-            },
+            content=_image_content(slide, media),
             debug=LayoutDebugInfo(
                 content_length=len(slide.image_prompt or ""),
                 estimated_lines=0,
@@ -391,17 +440,11 @@ def _layout_hero_image_slide(slide, spacing_scale: float) -> list[LayoutElement]
             region="media",
             x=0,
             y=0,
-            width=right_width,
-            height=440,
+            width=right_width - (PANEL_PADDING * 2),
+            height=440 - (PANEL_PADDING * 2),
             align=Alignment.CENTER,
             wrap=False,
-            content={
-                "image": True,
-                "src": (media or {}).get("public_url") or (media or {}).get("local_path"),
-                "local_path": (media or {}).get("local_path"),
-                "alt": (media or {}).get("alt") or slide.image_prompt or slide.title or slide.id,
-                "prompt": (media or {}).get("prompt") or slide.image_prompt,
-            },
+            content=_image_content(slide, media),
             debug=LayoutDebugInfo(
                 content_length=len(slide.image_prompt or ""),
                 estimated_lines=0,
@@ -447,7 +490,7 @@ def _layout_comparison_slide(slide, spacing_scale: float) -> list[LayoutElement]
             heading_height, _, _ = _text_height(heading, panel_width - 40, heading_font, min_height=28)
             children.append(_text_element(element_id=f"{slide.id}_{side}_heading", region=f"{side}.heading", x=0, y=0, width=panel_width - 40, text=heading, font_size=heading_font, align=Alignment.START, min_height=heading_height, note=f"{side} heading"))
             child_y += heading_height + _gap(14, spacing_scale, 10)
-        bullet_list = _bullet_list_element(element_id=f"{slide.id}_{side}_bullets", region=f"{side}.body", x=0, y=child_y, width=panel_width - 40, bullets=bullets, font_size=bullet_font)
+        bullet_list = _bullet_list_element(element_id=f"{slide.id}_{side}_bullets", region=f"{side}.body", x=0, y=child_y, width=panel_width - 40, bullets=bullets, font_size=bullet_font, max_height=250, icon_context=f"{slide.title or ''} {heading or ''}")
         children.append(bullet_list)
         height = max(320, sum(child.height + _gap(14, spacing_scale, 10) for child in children))
         return _panel_element(element_id=f"{slide.id}_{side}_panel", region=side, x=x, y=panel_y, width=panel_width, height=height, children=children, note=f"{side} comparison panel")

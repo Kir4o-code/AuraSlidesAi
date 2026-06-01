@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Request, status
 
-from app.schemas.presentation import GeneratePresentationRequest, GeneratePresentationResponse
+from app.schemas.presentation import GeneratePresentationRequest, GeneratePresentationResponse, ImageSource
 from app.services.gemini_service import (
     GeminiConfigurationError,
     GeminiImageGenerationError,
@@ -32,27 +32,34 @@ async def generate_presentation_route(
     layouted_presentation = None
     try:
         logger.info(
-            "[%s] Starting presentation generation. slide_count=%s style=%s prompt_chars=%s",
+            "[%s] Starting presentation generation. slide_count=%s style=%s planning_mode=%s image_source=%s prompt_chars=%s",
             request_id,
             payload.slide_count,
-            payload.style,
+            payload.template.value if payload.template else payload.style,
+            payload.planning_mode,
+            payload.image_source,
             len(payload.prompt),
         )
         presentation = await generate_presentation(
             prompt=payload.prompt,
             slide_count=payload.slide_count,
-            style=payload.style,
+            style=payload.template.value if payload.template else payload.style,
+            planning_mode=payload.planning_mode,
+            slide_outline=payload.slide_outline,
         )
+        if payload.template:
+            presentation.theme = payload.template
         settings = get_settings()
-        if settings.enable_image_generation:
+        if payload.image_source == ImageSource.IMAGE_RESEARCH or settings.enable_image_generation:
             logger.info(
-                "[%s] Starting Gemini image generation for image-backed slides.",
+                "[%s] Starting image enrichment. source=%s",
                 request_id,
+                payload.image_source,
             )
-            presentation = await enrich_presentation_images(presentation)
+            presentation = await enrich_presentation_images(presentation, payload.image_source)
         else:
             logger.info(
-                "[%s] Image generation disabled by env. Prompts will still render in slide layouts.",
+                "[%s] Gemini image generation disabled by env. Prompts will still render in slide layouts.",
                 request_id,
             )
         layouted_presentation, _semantic_theme = prepare_export_bundle(presentation)
@@ -96,7 +103,7 @@ async def generate_presentation_route(
             detail="Presentation generation failed unexpectedly.",
         ) from exc
 
-    pdf_url = str(request.base_url).rstrip("/") + f"/generated/{pdf_name}"
+    pdf_url = str(request.base_url).rstrip("/") + f"/generated/{pdf_name}" if pdf_name else None
     pptx_url = str(request.base_url).rstrip("/") + f"/generated/{pptx_name}"
     return GeneratePresentationResponse(
         presentation=presentation,

@@ -8,15 +8,15 @@ class ImageResearchRequest(BaseModel):
     image_type: str = "any"
     image_class: str | None = None
     max_candidates: int = Field(default=12, ge=1, le=50)
-    exclude_source_urls: list[str] = []
-    exclude_hashes: list[str] = []
+    exclude_source_urls: list[str] = Field(default_factory=list)
+    exclude_hashes: list[str] = Field(default_factory=list)
 
 
 class SearchPlan(BaseModel):
     main_query: str
-    alternative_queries: list[str] = []
-    visual_requirements: list[str] = []
-    bad_terms: list[str] = []
+    alternative_queries: list[str] = Field(default_factory=list)
+    visual_requirements: list[str] = Field(default_factory=list)
+    bad_terms: list[str] = Field(default_factory=list)
     preferred_orientation: str = "any"
     image_type: str = "any"
     image_class: str = "photo"
@@ -34,8 +34,8 @@ class ImageCandidate(BaseModel):
     license_url: str | None = None
     width: int | None = None
     height: int | None = None
-    tags: list[str] = []
-    categories: list[str] = []
+    tags: list[str] = Field(default_factory=list)
+    categories: list[str] = Field(default_factory=list)
     page_title: str | None = None
     factual_score: float = 0.0
     content_hash: str | None = None
@@ -63,7 +63,7 @@ class SelectedImage(BaseModel):
 class ImageResearchResponse(BaseModel):
     success: bool
     selected_image: SelectedImage | None
-    selected_images: list[SelectedImage] = []
+    selected_images: list[SelectedImage] = Field(default_factory=list)
     search_plan: SearchPlan | None
     candidate_count: int
-    warnings: list[str] = []
+    warnings: list[str] = Field(default_factory=list)

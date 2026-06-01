@@ -52,12 +52,24 @@ class ScreenshotExporter(BaseExporter):
         raise RuntimeError("Chromium-based browser not found for screenshot export.")
 
     def _write_data(self, presentation: Presentation, asset_id: str) -> Path:
+        from app.services.slide_generator import prepare_export_bundle
+
         self.export_data_dir.mkdir(parents=True, exist_ok=True)
         path = self.export_data_dir / f"{asset_id}.json"
-        path.write_text(json.dumps(presentation.model_dump(mode="json"), ensure_ascii=False), encoding="utf-8")
+        layouted_presentation, _ = prepare_export_bundle(presentation)
+        path.write_text(
+            json.dumps(
+                {
+                    "presentation": presentation.model_dump(mode="json"),
+                    "layouted_presentation": layouted_presentation.model_dump(mode="json"),
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
         return path
 
-    def export_pptx(self, presentation: Presentation, asset_id: str) -> str:
+    def export_pptx(self, presentation: Presentation, theme: object, asset_id: str) -> str:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.screenshot_dir.mkdir(parents=True, exist_ok=True)
         self._write_data(presentation, asset_id)
@@ -79,7 +91,7 @@ class ScreenshotExporter(BaseExporter):
         deck.save(output_path)
         return filename
 
-    def export_pdf(self, presentation: Presentation, asset_id: str) -> str:
+    def export_pdf(self, presentation: Presentation, theme: object, asset_id: str) -> str:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.screenshot_dir.mkdir(parents=True, exist_ok=True)
         self._write_data(presentation, asset_id)
