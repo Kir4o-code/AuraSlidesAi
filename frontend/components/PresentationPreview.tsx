@@ -114,7 +114,7 @@ export function PresentationPreview({
             Theme
           </p>
           <p className="mt-2 text-sm font-medium text-ink">
-            {resolveThemeTokens(result.presentation.theme).displayName}
+            {result.presentation.theme}
           </p>
         </div>
         <div className="rounded-2xl bg-slate-50 p-4">
@@ -130,7 +130,7 @@ export function PresentationPreview({
             Font
           </p>
           <p className="mt-2 text-sm font-medium text-ink">
-            {resolveThemeTokens(result.presentation.theme).headingFontFamily}
+            {resolveThemeTokens(result.presentation.theme).fontFamily}
           </p>
         </div>
       </div>

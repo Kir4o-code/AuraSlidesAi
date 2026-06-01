@@ -42,15 +42,14 @@ function SlideShell({
         padding: positioned ? 0 : `calc(2.5rem * ${tokens.spacingScale})`,
         background: `linear-gradient(145deg, ${tokens.background} 0%, ${tokens.backgroundAlt} 100%)`,
         borderColor: tokens.borderColor,
-        borderRadius: tokens.panelRadius + 8,
         boxShadow: tokens.shadow,
         color: tokens.textColor,
         fontFamily: tokens.bodyFontFamily,
       }}
     >
       <div
-        className={`absolute ${tokens.accentPosition === "top" ? "inset-x-0 top-0 h-2" : "inset-y-0 left-0 w-2"}`}
-        style={{ background: `linear-gradient(135deg, ${tokens.accentColor}, ${tokens.accentSoftColor})` }}
+        className="absolute inset-y-0 left-0 w-2"
+        style={{ background: `linear-gradient(180deg, ${tokens.accentColor}, ${tokens.accentSoftColor})` }}
       />
       <div
         className="absolute right-8 top-8 h-40 w-40 rounded-full blur-3xl opacity-50"
@@ -72,34 +71,6 @@ function layoutFontFamily(tokens: ReturnType<typeof resolveThemeTokens>, element
     return tokens.headingFontFamily;
   }
   return tokens.bodyFontFamily;
-}
-
-function DeckIcon({ icon, tokens }: { icon: string; tokens: ReturnType<typeof resolveThemeTokens> }) {
-  const stroke = tokens.accentColor;
-  return (
-    <svg viewBox="0 0 48 48" className="h-full w-full" aria-hidden="true">
-      <circle cx="24" cy="24" r="22" fill={tokens.accentSoftColor} stroke={stroke} strokeWidth="2" />
-      {icon === "chart" ? (
-        <>
-          <rect x="15" y="25" width="4" height="10" rx="1" fill={stroke} />
-          <rect x="22" y="19" width="4" height="16" rx="1" fill={stroke} />
-          <rect x="29" y="14" width="4" height="21" rx="1" fill={stroke} />
-        </>
-      ) : icon === "bolt" ? (
-        <path d="M27 10 16 27h8l-3 11 12-18h-8l2-10Z" fill={stroke} />
-      ) : icon === "idea" ? (
-        <>
-          <circle cx="24" cy="21" r="8" fill={stroke} />
-          <rect x="20" y="30" width="8" height="5" rx="2" fill={stroke} />
-        </>
-      ) : (
-        <>
-          <circle cx="24" cy="24" r="10" fill="none" stroke={stroke} strokeWidth="3" />
-          <circle cx="24" cy="24" r="3" fill={stroke} />
-        </>
-      )}
-    </svg>
-  );
 }
 
 function LayoutElementRenderer({
@@ -128,14 +99,6 @@ function LayoutElementRenderer({
 
   const content = element.content as Record<string, unknown>;
 
-  if (content.decorative_icon) {
-    return (
-      <div style={style}>
-        <DeckIcon icon={(content.icon as string | undefined) ?? "target"} tokens={tokens} />
-      </div>
-    );
-  }
-
   if (element.kind === "panel") {
     return (
       <div
@@ -143,7 +106,8 @@ function LayoutElementRenderer({
           ...style,
           background: tokens.surface,
           border: `1px solid ${tokens.borderColor}`,
-          borderRadius: tokens.panelRadius,
+          borderRadius: 24,
+          padding: 24,
           boxShadow: tokens.shadow,
         }}
       >
@@ -151,7 +115,7 @@ function LayoutElementRenderer({
           <LayoutElementRenderer key={child.id} element={child} tokens={tokens} debug={debug} />
         ))}
         {debug ? (
-          <div className="pointer-events-none absolute inset-0 border border-dashed border-rose-500/70" style={{ borderRadius: tokens.panelRadius }} />
+          <div className="pointer-events-none absolute inset-0 rounded-[24px] border border-dashed border-rose-500/70" />
         ) : null}
       </div>
     );
@@ -165,19 +129,13 @@ function LayoutElementRenderer({
       <div
         style={{
           ...style,
-          padding: tokens.imageFrameInset,
-          borderRadius: tokens.imageRadius,
+          borderRadius: 24,
           border: `1px solid ${tokens.borderColor}`,
           background: `linear-gradient(180deg, ${tokens.surface}, ${tokens.backgroundAlt})`,
         }}
       >
         {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={alt}
-            className="h-full w-full"
-            style={{ borderRadius: Math.max(tokens.imageRadius - tokens.imageFrameInset, 0), objectFit: tokens.imageFit }}
-          />
+          <img src={imageUrl} alt={alt} className="h-full w-full rounded-[24px] object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center p-5 text-center text-sm leading-6" style={{ color: tokens.textColor }}>
             {(content.prompt as string | undefined) ?? alt}
@@ -206,18 +164,12 @@ function LayoutElementRenderer({
           alignItems: "flex-start",
           gap: 16,
           padding: 16,
-          borderRadius: tokens.panelRadius,
+          borderRadius: 20,
           border: `1px solid ${tokens.borderColor}`,
-          background: tokens.bulletStyle === "lines" ? tokens.backgroundAlt : `${tokens.surface}d9`,
+          background: `${tokens.surface}d9`,
         }}
       >
-        {tokens.bulletStyle === "cards" ? (
-          <span className="h-12 w-12 flex-none">
-            <DeckIcon icon={(content.icon as string | undefined) ?? "target"} tokens={tokens} />
-          </span>
-        ) : (
-          <span className="mt-2 h-2.5 w-2.5 flex-none" style={{ background: tokens.accentColor }} />
-        )}
+        <span className="mt-2 h-2.5 w-2.5 flex-none rounded-full" style={{ background: tokens.accentColor }} />
         <span style={{ flex: 1 }}>{element.text}</span>
       </div>
     );

@@ -10,8 +10,8 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.util import Inches, Pt
 
-from app.schemas.presentation import Presentation, Slide, SlideType
 from app.semantic.contracts import Alignment
+from app.schemas.presentation import Presentation, Slide, SlideType
 from app.services.image_optimizer import optimize_image_file
 from app.services.theme_registry import ThemeTokens, get_theme_tokens
 
@@ -179,7 +179,7 @@ def _add_bullet_lines(slide, bullets: list[str], tokens: ThemeTokens, left: floa
             row_top,
             width,
             line_height,
-            f"- {bullet}",
+            f"• {bullet}",
             tokens=tokens,
             font_name=_body_font(tokens),
             font_size=_scaled_font(tokens, 20),
@@ -308,7 +308,7 @@ def create_quote_slide(prs: PptxPresentation, slide: Slide, tokens: ThemeTokens)
     quote_size = _scaled_font(tokens, _fit_font_size(34, slide.quote or "", 24, 46))
     _add_textbox(page, 1.5, 2.5, 10.3, 3.0, slide.quote or "", font_name=_heading_font(tokens), font_size=quote_size, color=tokens.text_color, bold=True, align=PP_ALIGN.CENTER)
     if slide.attribution:
-        _add_textbox(page, 1.5, 5.5, 10.3, 0.6, f"- {slide.attribution}", font_name=_body_font(tokens), font_size=_scaled_font(tokens, 20), color=tokens.muted_text_color, align=PP_ALIGN.CENTER)
+        _add_textbox(page, 1.5, 5.5, 10.3, 0.6, f"— {slide.attribution}", font_name=_body_font(tokens), font_size=_scaled_font(tokens, 20), color=tokens.muted_text_color, align=PP_ALIGN.CENTER)
 
 SLIDE_RENDERERS: dict[SlideType, Callable[[PptxPresentation, Slide, ThemeTokens], None]] = {
     SlideType.TITLE_SLIDE: create_title_slide,
@@ -353,80 +353,13 @@ def _semantic_font_name(theme: ThemeDefinition, region: str, kind: LayoutElement
     return theme.tokens.fonts.body or theme.tokens.fonts.heading
 
 
-def _export_font_name(value: str | None, fallback: str = "Aptos") -> str:
-    if not value:
-        return fallback
-    first = value.split(",", 1)[0].strip().strip("'\"")
-    return first or fallback
-
-
-def _component_style(theme: ThemeDefinition, component: str) -> dict:
-    return theme.tokens.component_styles.get(component, {})
-
-
-def _semantic_shape(theme: ThemeDefinition, component: str = "panel"):
-    return MSO_SHAPE.RECTANGLE if _component_style(theme, component).get("style") == "square" else MSO_SHAPE.ROUNDED_RECTANGLE
-
-
-def _add_fitted_semantic_picture(slide, path: Path, left: float, top: float, width: float, height: float) -> None:
-    image_width, image_height = _fit_image(path, width, height)
-    offset_left = left + (width - image_width) / 2
-    offset_top = top + (height - image_height) / 2
-    slide.shapes.add_picture(
-        str(path),
-        Inches(_px(offset_left)),
-        Inches(_px(offset_top)),
-        Inches(_px(image_width)),
-        Inches(_px(image_height)),
-    )
-
-
-def _add_shape_icon(slide, left: float, top: float, size: float, icon: str, theme: ThemeDefinition) -> None:
-    bg = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(_px(left)), Inches(_px(top)), Inches(_px(size)), Inches(_px(size)))
-    bg.fill.solid()
-    bg.fill.fore_color.rgb = _rgb(theme.tokens.accent_secondary)
-    bg.line.color.rgb = _rgb(theme.tokens.accent_primary)
-    inset = size * 0.24
-    color = _rgb(theme.tokens.accent_primary)
-    if icon == "chart":
-        bar_w = size * 0.12
-        for i, h in enumerate((0.22, 0.36, 0.5)):
-            bar = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(_px(left + inset + i * bar_w * 1.8)), Inches(_px(top + size - inset - size * h)), Inches(_px(bar_w)), Inches(_px(size * h)))
-            bar.fill.solid()
-            bar.fill.fore_color.rgb = color
-            bar.line.fill.background()
-    elif icon == "bolt":
-        tri = slide.shapes.add_shape(MSO_SHAPE.ISOSCELES_TRIANGLE, Inches(_px(left + inset)), Inches(_px(top + inset * 0.8)), Inches(_px(size - inset * 2)), Inches(_px(size - inset * 1.6)))
-        tri.fill.solid()
-        tri.fill.fore_color.rgb = color
-        tri.line.fill.background()
-    elif icon == "idea":
-        bulb = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(_px(left + inset)), Inches(_px(top + inset)), Inches(_px(size - inset * 2)), Inches(_px(size - inset * 2.2)))
-        bulb.fill.solid()
-        bulb.fill.fore_color.rgb = color
-        bulb.line.fill.background()
-        base = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(_px(left + size * 0.4)), Inches(_px(top + size * 0.62)), Inches(_px(size * 0.2)), Inches(_px(size * 0.12)))
-        base.fill.solid()
-        base.fill.fore_color.rgb = color
-        base.line.fill.background()
-    else:
-        ring = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(_px(left + inset)), Inches(_px(top + inset)), Inches(_px(size - inset * 2)), Inches(_px(size - inset * 2)))
-        ring.fill.background()
-        ring.line.color.rgb = color
-        ring.line.width = Pt(2)
-        dot = slide.shapes.add_shape(MSO_SHAPE.OVAL, Inches(_px(left + size * 0.43)), Inches(_px(top + size * 0.43)), Inches(_px(size * 0.14)), Inches(_px(size * 0.14)))
-        dot.fill.solid()
-        dot.fill.fore_color.rgb = color
-        dot.line.fill.background()
-
-
 def _render_debug_label(slide, element: LayoutElement, left: float, top: float, theme: ThemeDefinition) -> None:
     box = slide.shapes.add_textbox(Inches(_px(left + 4)), Inches(_px(top + 4)), Inches(max(_px(min(element.width, 200)), 0.4)), Inches(0.22))
     frame = box.text_frame
     frame.clear()
     run = frame.paragraphs[0].add_run()
-    run.text = f"{element.region} | {element.x},{element.y} {element.width}x{element.height}"
-    run.font.name = _export_font_name(theme.tokens.fonts.mono or theme.tokens.fonts.body)
+    run.text = f"{element.region} · {element.x},{element.y} {element.width}x{element.height}"
+    run.font.name = theme.tokens.fonts.mono or theme.tokens.fonts.body
     run.font.size = Pt(7)
     run.font.color.rgb = _rgb(theme.tokens.accent_primary)
 
@@ -438,62 +371,30 @@ def _render_layout_element(slide, element: LayoutElement, theme: ThemeDefinition
     height = element.height
 
     if element.kind == LayoutElementKind.PANEL:
-        panel = slide.shapes.add_shape(_semantic_shape(theme), Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
+        panel = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
         panel.fill.solid()
         panel.fill.fore_color.rgb = _rgb(theme.tokens.surface)
         panel.line.color.rgb = _rgb(theme.tokens.border)
         panel.line.width = Pt(1)
     elif element.kind == LayoutElementKind.IMAGE:
         local_path = element.content.get("local_path") if isinstance(element.content, dict) else None
+        public_url = element.content.get("src") if isinstance(element.content, dict) else None
         image_path = Path(local_path) if local_path else None
-        inset = int(_component_style(theme, "image").get("frame_inset") or 0)
-        frame = slide.shapes.add_shape(_semantic_shape(theme), Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
-        frame.fill.solid()
-        frame.fill.fore_color.rgb = _rgb(theme.tokens.surface)
-        frame.line.color.rgb = _rgb(theme.tokens.border)
-        frame.line.width = Pt(1)
         if image_path and image_path.exists():
-            _add_fitted_semantic_picture(
-                slide,
-                image_path,
-                left + inset,
-                top + inset,
-                max(1, width - (inset * 2)),
-                max(1, height - (inset * 2)),
-            )
+            slide.shapes.add_picture(str(image_path), Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
         else:
-            placeholder = slide.shapes.add_textbox(Inches(_px(left + inset)), Inches(_px(top + inset)), Inches(_px(max(1, width - (inset * 2)))), Inches(_px(max(1, height - (inset * 2)))))
+            placeholder = slide.shapes.add_textbox(Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
             frame = placeholder.text_frame
             frame.word_wrap = True
             frame.clear()
             run = frame.paragraphs[0].add_run()
             run.text = element.content.get("prompt") or element.text or "Image"
-            run.font.name = _export_font_name(theme.tokens.fonts.body)
+            run.font.name = theme.tokens.fonts.body
             run.font.size = Pt(max(10, (element.font_size or 18) * 0.7))
             run.font.color.rgb = _rgb(theme.tokens.text_primary)
-    elif element.kind == LayoutElementKind.BULLET_ITEM:
-        bullet_style = _component_style(theme, "bullet").get("style")
-        card = slide.shapes.add_shape(_semantic_shape(theme), Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
-        card.fill.solid()
-        card.fill.fore_color.rgb = _rgb(theme.tokens.background_alt if bullet_style == "lines" else theme.tokens.surface)
-        card.line.color.rgb = _rgb(theme.tokens.border)
-        card.line.width = Pt(1)
-        _add_shape_icon(slide, left + 16, top + 14, 42, str(element.content.get("icon") or "target"), theme)
-        textbox = slide.shapes.add_textbox(Inches(_px(left + 72)), Inches(_px(top + 12)), Inches(_px(max(width - 88, 20))), Inches(_px(max(height - 18, 20))))
-        frame = textbox.text_frame
-        frame.word_wrap = True
-        frame.clear()
-        frame.margin_left = Inches(0.02)
-        frame.margin_right = Inches(0.02)
-        frame.margin_top = Inches(0.02)
-        frame.margin_bottom = Inches(0.02)
-        run = frame.paragraphs[0].add_run()
-        run.text = element.text or ""
-        run.font.name = _export_font_name(_semantic_font_name(theme, element.region, element.kind))
-        run.font.size = Pt(element.font_size or 18)
-        run.font.color.rgb = _rgb(theme.tokens.text_primary)
-    elif element.content.get("decorative_icon"):
-        _add_shape_icon(slide, left, top, min(width, height), str(element.content.get("icon") or "target"), theme)
+            placeholder.fill.solid()
+            placeholder.fill.fore_color.rgb = _rgb(theme.tokens.background_alt)
+            placeholder.line.color.rgb = _rgb(theme.tokens.border)
     else:
         textbox = slide.shapes.add_textbox(Inches(_px(left)), Inches(_px(top)), Inches(_px(width)), Inches(_px(height)))
         frame = textbox.text_frame
@@ -511,10 +412,10 @@ def _render_layout_element(slide, element: LayoutElement, theme: ThemeDefinition
         }[element.align]
         run = paragraph.add_run()
         if element.kind == LayoutElementKind.BULLET_ITEM:
-            run.text = f"- {element.text or ''}"
+            run.text = f"• {element.text or ''}"
         else:
             run.text = element.text or ""
-        run.font.name = _export_font_name(_semantic_font_name(theme, element.region, element.kind))
+        run.font.name = _semantic_font_name(theme, element.region, element.kind)
         if element.font_size:
             run.font.size = Pt(element.font_size)
         run.font.color.rgb = _rgb(theme.tokens.text_primary)
@@ -545,14 +446,7 @@ def _render_layout_slide(prs: PptxPresentation, slide_data: LayoutedSlide, theme
     stops[1].color.rgb = _rgb(theme.tokens.background_alt)
     background.line.fill.background()
 
-    accent_position = _component_style(theme, "background").get("accent_position")
-    accent = page.shapes.add_shape(
-        MSO_SHAPE.RECTANGLE,
-        Inches(0),
-        Inches(0),
-        SLIDE_WIDTH if accent_position == "top" else Inches(0.12),
-        Inches(0.12) if accent_position == "top" else SLIDE_HEIGHT,
-    )
+    accent = page.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(0.12), SLIDE_HEIGHT)
     accent.fill.solid()
     accent.fill.fore_color.rgb = _rgb(theme.tokens.accent_primary)
     accent.line.fill.background()
@@ -570,4 +464,3 @@ def build_pptx_presentation(layouted_presentation: LayoutedPresentationDocument,
         _render_layout_slide(pptx, slide, theme)
 
     return pptx
-

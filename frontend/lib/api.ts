@@ -10,7 +10,12 @@ export type ThemeName =
   | "nature_organic"
   | "luxury_editorial"
   | "playful_learning"
-  | "monochrome_bold";
+  | "monochrome_bold"
+  | "modern_dark"
+  | "modern_light"
+  | "editorial"
+  | "corporate"
+  | "playful";
 
 export type SlideType =
   | "title_slide"
@@ -26,7 +31,7 @@ export type PlanningMode = "automatic" | "guided";
 
 export interface GuidedSlideIntent {
   purpose: string;
-  requested_type?: SlideType | null;
+  requested_type: SlideType | null;
 }
 
 export interface ResolvedImageAsset {
@@ -37,7 +42,6 @@ export interface ResolvedImageAsset {
   image_url: string;
   author: string | null;
   license_name: string;
-  image_class?: "icon" | "diagram" | "illustration" | "photo" | null;
   width?: number | null;
   height?: number | null;
   clip_score?: number | null;
@@ -120,7 +124,6 @@ export interface PresentationSlide {
   subtitle?: string | null;
   bullets?: string[];
   image_prompt?: string | null;
-  image_class?: "icon" | "diagram" | "illustration" | "photo" | null;
   notes?: string | null;
   left_title?: string | null;
   right_title?: string | null;
@@ -143,9 +146,9 @@ export interface GeneratePresentationPayload {
   prompt: string;
   slide_count: number;
   style: string;
-  template: ThemeName;
-  image_source: "gemini" | "image_research";
-  planning_mode: PlanningMode;
+  template?: ThemeName;
+  image_source?: "gemini" | "image_research";
+  planning_mode?: PlanningMode;
   slide_outline?: GuidedSlideIntent[];
 }
 
@@ -212,7 +215,7 @@ const PROGRESS_STAGES = [
   { label: "Sending prompt to the backend", value: 10 },
   { label: "Planning slides with Gemini", value: 34 },
   { label: "Validating JSON with Pydantic", value: 58 },
-  { label: "Resolving slide images", value: 76 },
+  { label: "Generating slide images with Gemini", value: 76 },
   { label: "Exporting the PDF", value: 92 },
 ];
 

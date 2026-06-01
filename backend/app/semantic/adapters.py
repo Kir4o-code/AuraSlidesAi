@@ -82,7 +82,6 @@ def presentation_to_document(presentation: Presentation) -> PresentationDocument
                 "subtitle": slide.subtitle,
                 "bullets": list(slide.bullets),
                 "image_prompt": slide.image_prompt,
-                "image_class": getattr(slide.image_class, "value", slide.image_class),
                 "notes": slide.notes,
                 "left_title": slide.left_title,
                 "right_title": slide.right_title,

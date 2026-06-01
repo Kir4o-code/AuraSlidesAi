@@ -31,7 +31,7 @@ export function TemplateSelector({ disabled, value, onChange }: TemplateSelector
               } disabled:cursor-not-allowed disabled:opacity-60`}
             >
               <div
-                className="relative h-20 overflow-hidden rounded-xl border"
+                className="relative overflow-hidden rounded-xl border px-4 py-4"
                 style={{
                   borderColor: template.borderColor,
                   background: `linear-gradient(145deg, ${template.background}, ${template.backgroundAlt})`,
@@ -41,30 +41,47 @@ export function TemplateSelector({ disabled, value, onChange }: TemplateSelector
                   className={`absolute ${template.accentPosition === "top" ? "inset-x-0 top-0 h-1.5" : "inset-y-0 left-0 w-1.5"}`}
                   style={{ background: template.accentColor }}
                 />
-                <span
-                  className="absolute left-4 top-4 h-2 w-24 rounded-full"
-                  style={{ background: template.textColor }}
-                />
-                <span
-                  className="absolute left-4 top-8 h-1.5 w-16 rounded-full opacity-60"
-                  style={{ background: template.mutedTextColor }}
-                />
-                <span
-                  className="absolute bottom-3 left-4 h-7 w-20 border"
-                  style={{
-                    borderColor: template.borderColor,
-                    borderRadius: template.panelRadius,
-                    background: template.surface,
-                  }}
-                />
-                <span
-                  className="absolute bottom-3 right-3 h-11 w-20 border"
-                  style={{
-                    borderColor: template.borderColor,
-                    borderRadius: template.imageRadius,
-                    background: template.accentSoftColor,
-                  }}
-                />
+                <div className="relative flex min-h-[6.5rem] flex-col justify-between gap-3 pt-1">
+                  <div>
+                    <p
+                      className="text-[0.68rem] font-semibold uppercase tracking-[0.22em]"
+                      style={{ color: template.accentColor, fontFamily: template.bodyFontFamily }}
+                    >
+                      Theme preview
+                    </p>
+                    <p
+                      className="mt-2 text-[1rem] font-semibold leading-tight"
+                      style={{ color: template.textColor, fontFamily: template.headingFontFamily }}
+                    >
+                      {template.displayName}
+                    </p>
+                    <p
+                      className="mt-1 text-[0.78rem] leading-5"
+                      style={{ color: template.mutedTextColor, fontFamily: template.bodyFontFamily }}
+                    >
+                      {template.description}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span
+                      className="inline-flex rounded-full border px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.18em]"
+                      style={{
+                        borderColor: template.borderColor,
+                        color: template.textColor,
+                        background: template.surface,
+                        fontFamily: template.headingFontFamily,
+                      }}
+                    >
+                      Aa
+                    </span>
+                    <span
+                      className="max-w-[68%] text-right text-[0.68rem] leading-4"
+                      style={{ color: template.textColor, fontFamily: template.bodyFontFamily }}
+                    >
+                      {template.useCases[0]}
+                    </span>
+                  </div>
+                </div>
               </div>
               <div className="mt-3 flex items-start justify-between gap-2">
                 <div>

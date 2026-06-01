@@ -29,16 +29,26 @@ class ThemeName(str, Enum):
     LUXURY_EDITORIAL = "luxury_editorial"
     PLAYFUL_LEARNING = "playful_learning"
     MONOCHROME_BOLD = "monochrome_bold"
-
-
-class ImageSource(str, Enum):
-    GEMINI = "gemini"
-    IMAGE_RESEARCH = "image_research"
+    MODERN_DARK = "modern_dark"
+    MODERN_LIGHT = "modern_light"
+    EDITORIAL = "editorial"
+    CORPORATE = "corporate"
+    PLAYFUL = "playful"
 
 
 class PlanningMode(str, Enum):
     AUTOMATIC = "automatic"
     GUIDED = "guided"
+
+
+class GuidedSlideIntent(BaseModel):
+    purpose: str = Field(min_length=1, max_length=500)
+    requested_type: SlideType | None = None
+
+
+class ImageSource(str, Enum):
+    GEMINI = "gemini"
+    IMAGE_RESEARCH = "image_research"
 
 
 class ImageClass(str, Enum):
@@ -56,7 +66,6 @@ class ResolvedImageAsset(BaseModel):
     image_url: str
     author: str | None = None
     license_name: str
-    image_class: ImageClass | None = None
     width: int | None = None
     height: int | None = None
     clip_score: float | None = None
@@ -146,32 +155,14 @@ class Slide(BaseModel):
 
 class Presentation(BaseModel):
     title: str = Field(min_length=1, max_length=160)
-    theme: ThemeName = Field(default=ThemeName.MODERN_DARK_TECH)
+    theme: ThemeName = Field(default=ThemeName.MODERN_DARK)
     slides: list[Slide] = Field(min_length=3, max_length=12)
-
-
-class GuidedSlideIntent(BaseModel):
-    purpose: str = Field(min_length=3, max_length=500)
-    requested_type: SlideType | None = None
 
 
 class GeneratePresentationRequest(BaseModel):
     prompt: str = Field(min_length=5, max_length=4000)
     slide_count: int = Field(default=5, ge=3, le=10)
     style: str = Field(default="modern", min_length=1, max_length=40)
-    template: str | None = Field(default=None, max_length=80)
-    image_source: ImageSource = ImageSource.GEMINI
-    planning_mode: PlanningMode = PlanningMode.AUTOMATIC
-    slide_outline: list[GuidedSlideIntent] = Field(default_factory=list, max_length=10)
-
-    @model_validator(mode="after")
-    def validate_guided_outline(self) -> "GeneratePresentationRequest":
-        if self.planning_mode == PlanningMode.GUIDED:
-            if len(self.slide_outline) < 3:
-                raise ValueError("Guided presentations need at least three slide briefs.")
-            if self.slide_count != len(self.slide_outline):
-                raise ValueError("Guided slide count must match the number of slide briefs.")
-        return self
 
 
 class GeneratePresentationResponse(BaseModel):

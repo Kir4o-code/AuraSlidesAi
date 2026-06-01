@@ -2,6 +2,8 @@ import type { CSSProperties } from "react";
 
 import type { ThemeName } from "@/lib/api";
 
+type ThemeRegistryKey = Exclude<ThemeName, "modern_dark" | "modern_light" | "editorial" | "corporate" | "playful">;
+
 export interface ThemeTokens {
   name: ThemeName;
   displayName: string;
@@ -74,7 +76,7 @@ function defineTheme(
   return { ...defaults, ...tokens };
 }
 
-export const THEME_REGISTRY: Record<ThemeName, ThemeTokens> = {
+export const THEME_REGISTRY: Record<ThemeRegistryKey, ThemeTokens> = {
   clean_school: defineTheme({
     name: "clean_school",
     displayName: "Clean School",
@@ -438,7 +440,7 @@ export const TEMPLATE_OPTIONS = Object.values(THEME_REGISTRY);
 
 export function resolveThemeTokens(themeName: ThemeName | string | null | undefined): ThemeTokens {
   const resolved = themeName ? THEME_ALIASES[themeName] ?? themeName : "modern_dark_tech";
-  return THEME_REGISTRY[resolved as ThemeName] ?? THEME_REGISTRY.modern_dark_tech;
+  return THEME_REGISTRY[resolved as ThemeRegistryKey] ?? THEME_REGISTRY.modern_dark_tech;
 }
 
 export function buildThemeStyle(tokens: ThemeTokens): CSSProperties {
