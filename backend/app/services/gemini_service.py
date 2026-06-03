@@ -32,6 +32,8 @@ class GeminiSettings(BaseSettings):
     gemini_api_key: str
     gemini_planning_model: str = "gemini-2.5-flash"
     gemini_image_model: str = "gemini-2.5-flash-image"
+    gemini_planning_timeout_seconds: int = 45
+    gemini_image_timeout_seconds: int = 90
     enable_image_generation: bool = Field(default=True, validation_alias="IMAGE_GEN_SWITCH")
 
 
@@ -210,6 +212,10 @@ def get_settings() -> GeminiSettings:
 def get_client() -> genai.Client:
     settings = get_settings()
     return genai.Client(api_key=settings.gemini_api_key)
+
+
+def _http_options(timeout_seconds: int) -> types.HttpOptions:
+    return types.HttpOptions(timeout=max(1, timeout_seconds) * 1000)
 
 
 def _normalize_bullets(values: list[str], limit: int, fallback: list[str]) -> list[str]:
@@ -637,17 +643,26 @@ Return JSON only.
     try:
         # Structured output keeps the MVP stable by asking Gemini for JSON that
         # already matches the planning schema instead of free-form text.
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model=settings.gemini_planning_model,
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                response_mime_type="application/json",
-                response_json_schema=GEMINI_PLANNING_JSON_SCHEMA,
-                temperature=0.3,
+        response = await asyncio.wait_for(
+            asyncio.to_thread(
+                client.models.generate_content,
+                model=settings.gemini_planning_model,
+                contents=user_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    response_mime_type="application/json",
+                    response_json_schema=GEMINI_PLANNING_JSON_SCHEMA,
+                    temperature=0.3,
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+                    http_options=_http_options(settings.gemini_planning_timeout_seconds),
+                ),
             ),
+            timeout=settings.gemini_planning_timeout_seconds + 5,
         )
+    except asyncio.TimeoutError as exc:
+        raise GeminiPlanningError(
+            f"Gemini planning timed out after {settings.gemini_planning_timeout_seconds} seconds."
+        ) from exc
     except Exception as exc:
         raise GeminiPlanningError(_provider_message(exc)) from exc
 
@@ -707,21 +722,30 @@ async def generate_slide_image(prompt: str) -> bytes:
     try:
         # The image model is isolated from planning so image failures do not
         # corrupt the slide JSON generation step.
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model=settings.gemini_image_model,
-            contents=final_prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["TEXT", "IMAGE"],
-                image_config=types.ImageConfig(
-                    aspect_ratio="16:9",
-                    image_size="1K",
+        response = await asyncio.wait_for(
+            asyncio.to_thread(
+                client.models.generate_content,
+                model=settings.gemini_image_model,
+                contents=final_prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["TEXT", "IMAGE"],
+                    image_config=types.ImageConfig(
+                        aspect_ratio="16:9",
+                        image_size="1K",
+                    ),
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+                    http_options=_http_options(settings.gemini_image_timeout_seconds),
                 ),
             ),
+            timeout=settings.gemini_image_timeout_seconds + 5,
         )
         return _extract_image_bytes(response)
     except GeminiImageGenerationError:
         raise
+    except asyncio.TimeoutError as exc:
+        raise GeminiImageGenerationError(
+            f"Gemini image generation timed out after {settings.gemini_image_timeout_seconds} seconds."
+        ) from exc
     except Exception as exc:
         raise GeminiImageGenerationError(_provider_message(exc)) from exc
 
