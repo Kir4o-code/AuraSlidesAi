@@ -25,7 +25,7 @@ async def download_image(image_url: str, prefix: str) -> str:
     async with httpx.AsyncClient(timeout=40, follow_redirects=True) as client:
         resp = await client.get(
             image_url,
-            headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
+            headers={"User-Agent": "AuraSlidesAI/1.0 (https://example.com; contact@auraslidesai.local)"},
         )
         if resp.status_code >= 400:
             raise DownloadError(f"HTTP {resp.status_code}", resp.status_code)
@@ -45,7 +45,7 @@ async def download_image(image_url: str, prefix: str) -> str:
 async def track_remote_download(download_tracking_url: str | None) -> None:
     if not download_tracking_url:
         return
-    headers = {"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"}
+    headers = {"User-Agent": "AuraSlidesAI/1.0 (https://example.com; contact@auraslidesai.local)"}
     access_key = get_unsplash_access_key()
     if "api.unsplash.com" in download_tracking_url and access_key:
         headers["Accept-Version"] = "v1"

@@ -6,7 +6,7 @@ from PIL import Image
 from pptx import Presentation as PptxPresentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
-from pptx.enum.text import PP_ALIGN
+from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.util import Inches, Pt
 
 from app.semantic.contracts import Alignment, LayoutElement, LayoutElementKind, LayoutedPresentationDocument, ThemeDefinition

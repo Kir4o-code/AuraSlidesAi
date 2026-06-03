@@ -22,6 +22,8 @@ class SlideAnalysis:
     timeline_items: int
     comparison_items: int
     stats_count: int
+    max_stat_value_length: int
+    avg_stat_value_length: int
     quote_length: int
     density: str
 
@@ -295,6 +297,9 @@ class SlideAnalyzer:
         timeline_items = len(slide.timeline or [])
         comparison_items = int(bool(slide.left_title)) + int(bool(slide.right_title))
         stats_count = len(slide.statistics or [])
+        stat_values = [str(item.value or "") for item in (slide.statistics or [])]
+        max_stat_value_length = max((len(value.strip()) for value in stat_values), default=0)
+        avg_stat_value_length = int(sum(len(value.strip()) for value in stat_values) / len(stat_values)) if stat_values else 0
         bullet_count = len(slide.bullets or []) + len(slide.left_bullets or []) + len(slide.right_bullets or [])
         quote_length = len((slide.quote or "").strip())
         density = SlideAnalyzer._density(
@@ -318,6 +323,8 @@ class SlideAnalyzer:
             timeline_items=timeline_items,
             comparison_items=comparison_items,
             stats_count=stats_count,
+            max_stat_value_length=max_stat_value_length,
+            avg_stat_value_length=avg_stat_value_length,
             quote_length=quote_length,
             density=density,
         )
@@ -414,6 +421,19 @@ class LayoutScorer:
         else:
             score -= 0.08
             reasons.append("theme style mismatch")
+
+        if analysis.slide_type == SlideType.STATISTICS.value and metadata.layout_id == "statistics.featured":
+            if analysis.max_stat_value_length > 16:
+                score -= 0.26
+                reasons.append("featured stat value too long")
+            elif analysis.avg_stat_value_length > 10:
+                score -= 0.14
+                reasons.append("featured stats too text-heavy")
+
+        if analysis.slide_type == SlideType.TIMELINE.value and metadata.layout_id == "timeline.stacked":
+            if analysis.paragraph_length > 140 or analysis.timeline_items >= 4:
+                score += 0.06
+                reasons.append("timeline favors roomy rows")
 
         repeat_count = recent_layout_counts.get(metadata.layout_id, 0)
         if recent_layout_id == metadata.layout_id:

@@ -783,34 +783,46 @@ Topic:
 Return JSON only.
 """.strip()
 
-    try:
-        # Structured output keeps the MVP stable by asking Gemini for JSON that
-        # already matches the planning schema instead of free-form text.
-        response = await _with_optional_timeout(
-            asyncio.to_thread(
-                client.models.generate_content,
-                model=settings.gemini_planning_model,
-                contents=user_prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
-                    response_mime_type="application/json",
-                    response_json_schema=GEMINI_PLANNING_JSON_SCHEMA,
-                    temperature=0.3,
-                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-                    http_options=_http_options(settings.gemini_planning_timeout_seconds),
+    planning_error: Exception | None = None
+    response_text = ""
+    plan: GeminiPresentationPlan | None = None
+    for attempt in range(2):
+        attempt_prompt = user_prompt
+        if attempt == 1:
+            attempt_prompt = f"{user_prompt}\n\n{_planning_retry_instruction(slide_count)}"
+
+        try:
+            # Structured output keeps the MVP stable by asking Gemini for JSON that
+            # already matches the planning schema instead of free-form text.
+            response = await _with_optional_timeout(
+                asyncio.to_thread(
+                    client.models.generate_content,
+                    model=settings.gemini_planning_model,
+                    contents=attempt_prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_PROMPT,
+                        response_mime_type="application/json",
+                        response_json_schema=GEMINI_PLANNING_JSON_SCHEMA,
+                        temperature=0.3 if attempt == 0 else 0.15,
+                        automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+                        http_options=_http_options(settings.gemini_planning_timeout_seconds),
+                    ),
                 ),
-            ),
-            settings.gemini_planning_timeout_seconds,
-        )
-    except asyncio.TimeoutError:
-        logger.warning("Gemini planning timed out. Using local fallback plan.")
-        return _plan_to_presentation(_fallback_plan_from_request(prompt, slide_count, style, slide_outline))
-    except Exception as exc:
-        provider_message = _provider_message(exc)
-        if planning_mode == PlanningMode.GUIDED and re.search(r"\b(timeout|timed out|deadline|504|deadline_exceeded)\b", provider_message, re.IGNORECASE):
-            logger.warning("Gemini guided planning failed with timeout-like error. Using local fallback plan: %s", provider_message)
-            return _plan_to_presentation(_fallback_plan_from_request(prompt, slide_count, style, slide_outline))
-        raise GeminiPlanningError(provider_message) from exc
+                settings.gemini_planning_timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Gemini planning timed out on attempt %s/2.", attempt + 1)
+            if planning_mode == PlanningMode.GUIDED or attempt == 1:
+                logger.warning("Using local fallback plan after Gemini timeout.")
+                return _plan_to_presentation(_fallback_plan_from_request(prompt, slide_count, style, slide_outline))
+            planning_error = GeminiPlanningError("Gemini planning timed out.")
+            continue
+        except Exception as exc:
+            provider_message = _provider_message(exc)
+            if planning_mode == PlanningMode.GUIDED and re.search(r"\b(timeout|timed out|deadline|504|deadline_exceeded)\b", provider_message, re.IGNORECASE):
+                logger.warning("Gemini guided planning failed with timeout-like error. Using local fallback plan: %s", provider_message)
+                return _plan_to_presentation(_fallback_plan_from_request(prompt, slide_count, style, slide_outline))
+            raise GeminiPlanningError(provider_message) from exc
 
         try:
             response_text = _extract_json_text(response)

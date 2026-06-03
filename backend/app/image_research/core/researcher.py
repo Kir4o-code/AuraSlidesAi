@@ -39,6 +39,10 @@ from app.image_research.schemas import (
 
 logger = logging.getLogger("image_researcher")
 STOCK_PROVIDER_NAMES = {"unsplash"}
+WIKIMEDIA_HEADERS = {
+    "User-Agent": "AuraSlidesAI/1.0 (https://example.com; contact@auraslidesai.local)",
+    "Accept": "application/json; charset=utf-8",
+}
 
 
 class ImageResearcher:
@@ -268,10 +272,6 @@ class ImageResearcher:
         )
 
         wiki_candidates = await wiki_provider.search(query, per_page=per_page, orientation=plan.preferred_orientation, image_type=plan.image_class)
-        if wiki_candidates and request.max_candidates <= 1:
-            logger.info("research.search entity=%s source=wikipedia candidates=%s", source_selection.entity_type.value, len(wiki_candidates))
-            return wiki_candidates
-
         commons_candidates = await commons_provider.search(query, per_page=per_page, orientation=plan.preferred_orientation, image_type=plan.image_class)
         if wiki_candidates:
             logger.info(
@@ -349,7 +349,7 @@ class ImageResearcher:
                         "limit": 5,
                         "namespace": 0,
                     },
-                    headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
+                    headers=WIKIMEDIA_HEADERS,
                 )
                 resp.raise_for_status()
                 titles = [title for title in resp.json()[1] if isinstance(title, str)]
@@ -365,7 +365,7 @@ class ImageResearcher:
                             "cllimit": 10,
                             "piprop": "name|original",
                         },
-                        headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
+                        headers=WIKIMEDIA_HEADERS,
                     )
                     cat_resp.raise_for_status()
                     pages = (cat_resp.json().get("query") or {}).get("pages") or {}
@@ -425,7 +425,7 @@ class ImageResearcher:
                             "limit": 3,
                             "namespace": 0,
                         },
-                        headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
+                        headers=WIKIMEDIA_HEADERS,
                     )
                     resp.raise_for_status()
                     for title in resp.json()[1][:1]:
@@ -440,7 +440,7 @@ class ImageResearcher:
                                     "prop": "langlinks",
                                     "lllang": "en",
                                 },
-                                headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
+                                headers=WIKIMEDIA_HEADERS,
                             )
                             lang.raise_for_status()
                             pages = (lang.json().get("query") or {}).get("pages") or {}

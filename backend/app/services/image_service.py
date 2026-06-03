@@ -7,6 +7,7 @@ from typing import Any
 
 from app.image_research.core.researcher import ImageResearcher
 from app.image_research.core.search_planner import compact_search_query
+from app.image_research.core.source_selector import _named_entity_candidates
 from app.image_research.schemas import ImageResearchRequest, SelectedImage
 from app.schemas.presentation import ImageClass, ImageSource, Presentation, ResolvedImageAsset, SlideType
 from app.services.gemini_service import (
@@ -20,6 +21,13 @@ from app.services.image_optimizer import ImageOptimizationError, optimize_image_
 
 logger = logging.getLogger(__name__)
 _image_researcher: ImageResearcher | None = None
+QUERY_STOPWORDS = {
+    "a", "an", "and", "the", "for", "with", "from", "that", "this",
+    "на", "в", "във", "и", "за", "от", "до", "по", "под", "над", "към", "при", "през", "но", "или",
+    "г", "година", "години",
+    "тоталитарният", "тоталитарен", "режим", "режима", "животът", "живота", "живот", "епоха", "власт", "властта",
+    "кой", "как", "като", "една", "личността", "нацията",
+}
 
 
 class ImageResearchResolutionError(Exception):
@@ -145,36 +153,61 @@ def _domain_concept_terms(title: str, bullets: list[str], prompt: str) -> str:
     return ""
 
 
+def _keyword_phrase(*parts: str, limit_words: int = 4, max_length: int = 36, exclude: set[str] | None = None) -> str:
+    exclude = exclude or set()
+    words: list[str] = []
+    seen: set[str] = set()
+    text = " ".join(part for part in parts if part)
+    for word in re.findall(r"[^\W\d_]+", text, flags=re.UNICODE):
+        key = word.lower()
+        if len(word) < 3 or key in QUERY_STOPWORDS or key in exclude or key in seen:
+            continue
+        seen.add(key)
+        words.append(word)
+        if len(words) >= limit_words:
+            break
+    return compact_search_query(" ".join(words), max_length=max_length) if words else ""
+
+
+def _presentation_entity(presentation_title: str) -> str:
+    candidates = _named_entity_candidates(presentation_title)
+    return candidates[0] if candidates else ""
+
+
+def _slide_mentions_entity(entity: str, title: str, bullets: list[str]) -> bool:
+    if not entity:
+        return False
+    text = " ".join([title, *bullets]).lower()
+    tokens = [token.lower() for token in re.findall(r"[^\W\d_]+", entity, flags=re.UNICODE)]
+    if not tokens:
+        return False
+    surname = tokens[-1]
+    return entity.lower() in text or surname in text
+
+
 def _research_prompt(slide: Any, presentation_title: str) -> str:
     title = (getattr(slide, "title", None) or "").strip()
     prompt = (getattr(slide, "image_prompt", None) or "").strip()
     bullets = [str(item).strip() for item in (getattr(slide, "bullets", None) or []) if str(item).strip()]
-    subject = compact_search_query(" ".join([title, *bullets[:1]]), max_length=28)
+    deck_entity = _presentation_entity(presentation_title)
+    local_entity_candidates = _named_entity_candidates(" | ".join([title, *bullets[:2]]))
+    entity = local_entity_candidates[0] if local_entity_candidates else (deck_entity if _slide_mentions_entity(deck_entity, title, bullets) else "")
+
+    if entity:
+        entity_tokens = {token.lower() for token in re.findall(r"[^\W\d_]+", entity, flags=re.UNICODE)}
+        qualifier = _keyword_phrase(title, *bullets[:2], limit_words=2, max_length=18, exclude=entity_tokens)
+        query = f"{entity} {qualifier}".strip() if qualifier else entity
+        return compact_search_query(query, max_length=30)
+
     concept_terms = _domain_concept_terms(title, bullets, prompt)
+    keyword_subject = _keyword_phrase(title, *bullets[:2], limit_words=4, max_length=28)
     scene_hint = _photo_scene_hint(title, bullets, prompt)
-    prompt_scene = compact_search_query(_extract_scene_from_image_prompt(prompt), max_length=30) if prompt else ""
+    prompt_scene = compact_search_query(_extract_scene_from_image_prompt(prompt), max_length=24) if prompt else ""
     prompt_scene = prompt_scene if prompt_scene and prompt_scene.lower() not in {"classroom", "learning", "students"} else ""
-    has_non_ascii_subject = any(not part.isascii() for part in (title, presentation_title) if part)
-    if has_non_ascii_subject:
-        candidates = [subject, title, presentation_title, prompt_scene, scene_hint, concept_terms]
-    else:
-        candidates = [scene_hint, concept_terms, prompt_scene, subject, title, presentation_title]
-    unique: list[str] = []
-    seen: set[str] = set()
-    for part in candidates:
-        cleaned = " ".join(part.split()).strip(" .,:;")
-        key = cleaned.lower()
-        if cleaned and key not in seen:
-            seen.add(key)
-            unique.append(cleaned)
 
-    primary = unique[0] if unique else ""
-    secondary = unique[1] if len(unique) > 1 else ""
-
-    if primary and secondary:
-        return compact_search_query(f"{primary} {secondary}", max_length=44)
-    if primary:
-        return compact_search_query(primary, max_length=34)
+    for candidate in (keyword_subject, concept_terms, scene_hint, prompt_scene):
+        if candidate:
+            return compact_search_query(candidate, max_length=32)
     return ""
 
 
@@ -182,7 +215,10 @@ def _research_context(slide: Any, presentation_title: str) -> str:
     title = (getattr(slide, "title", None) or "").strip()
     subtitle = (getattr(slide, "subtitle", None) or "").strip()
     bullets = [str(item).strip() for item in (getattr(slide, "bullets", None) or []) if str(item).strip()]
-    parts = [presentation_title, title, subtitle, *bullets[:3]]
+    parts = [title, subtitle, *bullets[:3]]
+    deck_entity = _presentation_entity(presentation_title)
+    if _slide_mentions_entity(deck_entity, title, bullets):
+        parts.append(deck_entity)
     return " | ".join(part for part in parts if part)
 
 

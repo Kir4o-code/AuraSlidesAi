@@ -9,7 +9,11 @@ from app.image_research.providers.base import BaseImageProvider
 from app.image_research.schemas import ImageCandidate
 
 
-USER_AGENT = "AuraSlidesAI/1.0 (presentation-image-research)"
+USER_AGENT = "AuraSlidesAI/1.0 (https://example.com; contact@auraslidesai.local)"
+DEFAULT_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "application/json; charset=utf-8",
+}
 
 
 class WikimediaCommonsProvider(BaseImageProvider):
@@ -28,7 +32,7 @@ class WikimediaCommonsProvider(BaseImageProvider):
             "iiurlwidth": 1600,
             "cllimit": 10,
         }
-        async with httpx.AsyncClient(timeout=25, headers={"User-Agent": USER_AGENT}) as client:
+        async with httpx.AsyncClient(timeout=25, headers=DEFAULT_HEADERS) as client:
             resp = await client.get("https://commons.wikimedia.org/w/api.php", params=params)
             if resp.status_code == 403:
                 return []

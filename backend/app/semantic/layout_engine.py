@@ -452,23 +452,24 @@ def _layout_image_bullets_slide(slide, spacing_scale: float, typography_scale: f
     left_width = 560
     right_x = 708
     right_width = 484
-    title_font = _scale_type(_fit_font_size(40, slide.title or "", 28, 40), typography_scale, 27)
+    title_font = _scale_type(_fit_font_size(38, slide.title or "", 24, 38), typography_scale, 24)
     bullet_font = _scale_type(21, typography_scale, 18)
     notes_font = _scale_type(17, typography_scale, 15)
     title_y = 90
+    left_height_limit = CANVAS_HEIGHT - title_y - 42
     inner_width = left_width - (PANEL_PADDING * 2)
-    inner_height = 548 - (PANEL_PADDING * 2)
+    inner_height = left_height_limit - (PANEL_PADDING * 2)
 
     left_children: list[LayoutElement] = []
     if slide.title:
-        title_height, _, _ = _text_height(slide.title, inner_width, title_font, min_height=68, padding_y=4)
-        title_gap = _gap(30, spacing_scale, 22)
+        title_height, _, _ = _text_height(slide.title, inner_width, title_font, min_height=72, padding_y=6)
+        title_gap = _gap(36, spacing_scale, 28)
         left_children.append(_text_element(element_id=f"{slide.id}_title", region="title", x=0, y=0, width=inner_width, text=slide.title, font_size=title_font, align=Alignment.START, min_height=title_height, spacing_after=title_gap, note="title"))
         offset_y = title_height + title_gap
     else:
         offset_y = 0
 
-    bullet_y = max(offset_y + _gap(12, spacing_scale, 8), 132)
+    bullet_y = offset_y + _gap(10, spacing_scale, 8)
     notes_height = _text_height(slide.notes or "", inner_width, notes_font, min_height=26)[0] if slide.notes else 0
     notes_reserve = notes_height + _gap(18, spacing_scale, 12) if slide.notes else 0
     bullet_list = _bullet_list_element(element_id=f"{slide.id}_bullets", region="body", x=0, y=bullet_y, width=inner_width, bullets=slide.bullets or [], font_size=bullet_font, max_height=max(120, inner_height - bullet_y - notes_reserve), icon_context=f"{slide.title or ''} {getattr(slide, 'icon_intent', '') or ''}")
@@ -684,24 +685,24 @@ def _layout_timeline_slide(slide, spacing_scale: float, typography_scale: float)
         title_y += title_height + _gap(24, spacing_scale, 18)
 
     rows: list[LayoutElement] = []
-    y = title_y
-    label_width = 160
+    y = max(title_y, 168)
+    label_width = 220
     row_width = width
     for index, step in enumerate(slide.timeline or []):
         row_children: list[LayoutElement] = []
-        label_font = _scale_type(17, typography_scale, 14)
-        detail_font = _scale_type(17, typography_scale, 14)
+        label_font = _scale_type(18, typography_scale, 15)
+        detail_font = _scale_type(18, typography_scale, 15)
         step_label = _item_field(step, "label", "")
         step_detail = _item_field(step, "detail")
-        label_h, _, _ = _text_height(step_label, label_width, label_font, min_height=24)
-        detail_w = row_width - label_width - 28
-        detail_h, _, _ = _text_height(step_detail or "", detail_w, detail_font, min_height=24)
-        row_h = max(label_h, detail_h) + _gap(40, spacing_scale, 28)
-        row_children.append(_text_element(element_id=f"{slide.id}_step_{index + 1}_label", region=f"timeline.{index + 1}.label", x=0, y=0, width=label_width, text=step_label, font_size=label_font, align=Alignment.START, min_height=label_h, max_height=row_h - 20, min_font_size=13, note="timeline label"))
+        detail_w = row_width - label_width - _gap(40, spacing_scale, 28)
+        label_h, _, _ = _text_height(step_label, label_width, label_font, min_height=28)
+        detail_h, _, _ = _text_height(step_detail or "", detail_w, detail_font, min_height=28)
+        row_h = max(label_h, detail_h) + _gap(48, spacing_scale, 34)
+        row_children.append(_text_element(element_id=f"{slide.id}_step_{index + 1}_label", region=f"timeline.{index + 1}.label", x=0, y=0, width=label_width, text=step_label, font_size=label_font, align=Alignment.START, min_height=label_h, max_height=row_h - 24, min_font_size=14, note="timeline label"))
         if step_detail:
-            row_children.append(_text_element(element_id=f"{slide.id}_step_{index + 1}_detail", region=f"timeline.{index + 1}.detail", x=label_width + _gap(28, spacing_scale, 18), y=0, width=detail_w, text=step_detail, font_size=detail_font, align=Alignment.START, min_height=detail_h, max_height=row_h - 20, min_font_size=13, note="timeline detail"))
+            row_children.append(_text_element(element_id=f"{slide.id}_step_{index + 1}_detail", region=f"timeline.{index + 1}.detail", x=label_width + _gap(40, spacing_scale, 28), y=0, width=detail_w, text=step_detail, font_size=detail_font, align=Alignment.START, min_height=detail_h, max_height=row_h - 24, min_font_size=14, note="timeline detail"))
         rows.append(_panel_element(element_id=f"{slide.id}_step_{index + 1}", region="timeline", x=MARGIN_X, y=y, width=row_width, height=row_h, children=row_children, note="timeline step"))
-        y += row_h + _gap(16, spacing_scale, 12)
+        y += row_h + _gap(20, spacing_scale, 14)
 
     elements.extend(rows)
     return elements
@@ -766,29 +767,29 @@ def _layout_statistics_featured_slide(slide, spacing_scale: float, typography_sc
         return elements
 
     hero = cards[0]
-    hero_width = 420
-    hero_height = 360
+    hero_width = 388
+    hero_height = 300
     hero_children: list[LayoutElement] = []
     hero_value = _item_field(hero, "value", "")
     hero_label = _item_field(hero, "label", "")
     hero_detail = _item_field(hero, "detail")
-    hero_value_font = _scale_type(58, typography_scale, 42)
-    hero_label_font = _scale_type(19, typography_scale, 14)
-    hero_detail_font = _scale_type(16, typography_scale, 13)
-    value_h, _, _ = _text_height(hero_value, hero_width - 40, hero_value_font, min_height=70)
-    label_h, _, _ = _text_height(hero_label, hero_width - 40, hero_label_font, min_height=26)
-    hero_children.append(_text_element(element_id=f"{slide.id}_hero_stat_value", region="hero_metric.value", x=0, y=0, width=hero_width - 40, text=hero_value, font_size=hero_value_font, align=Alignment.START, min_height=value_h, max_height=90, min_font_size=34, note="hero stat value"))
-    hero_children.append(_text_element(element_id=f"{slide.id}_hero_stat_label", region="hero_metric.label", x=0, y=value_h + 18, width=hero_width - 40, text=hero_label, font_size=hero_label_font, align=Alignment.START, min_height=label_h, max_height=54, min_font_size=13, note="hero stat label"))
+    hero_value_font = _scale_type(_fit_font_size(42, hero_value, 24, 42), typography_scale, 24)
+    hero_label_font = _scale_type(17, typography_scale, 14)
+    hero_detail_font = _scale_type(15, typography_scale, 12)
+    value_h, _, _ = _text_height(hero_value, hero_width - 40, hero_value_font, min_height=52)
+    label_h, _, _ = _text_height(hero_label, hero_width - 40, hero_label_font, min_height=24)
+    hero_children.append(_text_element(element_id=f"{slide.id}_hero_stat_value", region="hero_metric.value", x=0, y=0, width=hero_width - 40, text=hero_value, font_size=hero_value_font, align=Alignment.START, min_height=value_h, max_height=132, min_font_size=22, note="hero stat value"))
+    hero_children.append(_text_element(element_id=f"{slide.id}_hero_stat_label", region="hero_metric.label", x=0, y=value_h + 14, width=hero_width - 40, text=hero_label, font_size=hero_label_font, align=Alignment.START, min_height=label_h, max_height=60, min_font_size=13, note="hero stat label"))
     if hero_detail:
-        detail_h, _, _ = _text_height(hero_detail, hero_width - 40, hero_detail_font, min_height=24)
-        hero_children.append(_text_element(element_id=f"{slide.id}_hero_stat_detail", region="hero_metric.detail", x=0, y=value_h + label_h + 42, width=hero_width - 40, text=hero_detail, font_size=hero_detail_font, align=Alignment.START, min_height=detail_h, max_height=112, min_font_size=12, note="hero stat detail"))
+        detail_h, _, _ = _text_height(hero_detail, hero_width - 40, hero_detail_font, min_height=22)
+        hero_children.append(_text_element(element_id=f"{slide.id}_hero_stat_detail", region="hero_metric.detail", x=0, y=value_h + label_h + 32, width=hero_width - 40, text=hero_detail, font_size=hero_detail_font, align=Alignment.START, min_height=detail_h, max_height=96, min_font_size=12, note="hero stat detail"))
     elements.append(_panel_element(element_id=f"{slide.id}_hero_stat", region="hero_metric", x=MARGIN_X, y=max(title_y, 176), width=hero_width, height=hero_height, children=hero_children, note="featured statistic"))
 
     secondary = cards[1:]
     grid_x = MARGIN_X + hero_width + 28
     grid_width = CANVAS_WIDTH - grid_x - MARGIN_X
     card_width = int((grid_width - 24) / 2)
-    card_height = 164
+    card_height = 176
     for index, stat in enumerate(secondary[:4]):
         col = index % 2
         row = index // 2
@@ -798,11 +799,11 @@ def _layout_statistics_featured_slide(slide, spacing_scale: float, typography_sc
         label = _item_field(stat, "label", "")
         detail = _item_field(stat, "detail")
         child_elements = [
-            _text_element(element_id=f"{slide.id}_stat_{index + 2}_value", region=f"stat.{index + 2}.value", x=0, y=0, width=card_width - 40, text=value, font_size=_scale_type(32, typography_scale, 24), align=Alignment.START, min_height=40, max_height=46, min_font_size=20, note="stat value"),
-            _text_element(element_id=f"{slide.id}_stat_{index + 2}_label", region=f"stat.{index + 2}.label", x=0, y=58, width=card_width - 40, text=label, font_size=_scale_type(16, typography_scale, 13), align=Alignment.START, min_height=24, max_height=40, min_font_size=12, note="stat label"),
+            _text_element(element_id=f"{slide.id}_stat_{index + 2}_value", region=f"stat.{index + 2}.value", x=0, y=0, width=card_width - 40, text=value, font_size=_scale_type(_fit_font_size(28, value, 18, 28), typography_scale, 18), align=Alignment.START, min_height=38, max_height=84, min_font_size=18, note="stat value"),
+            _text_element(element_id=f"{slide.id}_stat_{index + 2}_label", region=f"stat.{index + 2}.label", x=0, y=66, width=card_width - 40, text=label, font_size=_scale_type(15, typography_scale, 12), align=Alignment.START, min_height=22, max_height=50, min_font_size=12, note="stat label"),
         ]
         if detail:
-            child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 2}_detail", region=f"stat.{index + 2}.detail", x=0, y=96, width=card_width - 40, text=detail, font_size=_scale_type(14, typography_scale, 12), align=Alignment.START, min_height=22, max_height=44, min_font_size=11, note="stat detail"))
+            child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 2}_detail", region=f"stat.{index + 2}.detail", x=0, y=108, width=card_width - 40, text=detail, font_size=_scale_type(14, typography_scale, 12), align=Alignment.START, min_height=22, max_height=48, min_font_size=11, note="stat detail"))
         elements.append(_panel_element(element_id=f"{slide.id}_stat_{index + 2}", region="metrics", x=x, y=y, width=card_width, height=card_height, children=child_elements, note="secondary statistic"))
     return elements
 

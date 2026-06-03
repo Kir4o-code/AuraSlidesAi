@@ -8,7 +8,11 @@ from app.image_research.providers.base import BaseImageProvider
 from app.image_research.schemas import ImageCandidate
 
 
-USER_AGENT = "AuraSlidesAI/1.0 (presentation-image-research)"
+USER_AGENT = "AuraSlidesAI/1.0 (https://example.com; contact@auraslidesai.local)"
+DEFAULT_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "application/json; charset=utf-8",
+}
 
 
 class WikipediaProvider(BaseImageProvider):
@@ -21,7 +25,7 @@ class WikipediaProvider(BaseImageProvider):
             if title not in titles:
                 titles.append(title)
 
-        async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers={"User-Agent": USER_AGENT}) as client:
+        async with httpx.AsyncClient(timeout=20, follow_redirects=True, headers=DEFAULT_HEADERS) as client:
             for title in titles:
                 summary = await client.get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote(title.replace(' ', '_'), safe=':_()/')}")
                 if summary.status_code == 404:
@@ -68,7 +72,7 @@ class WikipediaProvider(BaseImageProvider):
         return [value for index, value in enumerate(variants) if value and value not in variants[:index]]
 
     async def _candidate_titles(self, query: str, per_page: int) -> list[str]:
-        async with httpx.AsyncClient(timeout=20, headers={"User-Agent": USER_AGENT}) as client:
+        async with httpx.AsyncClient(timeout=20, headers=DEFAULT_HEADERS) as client:
             resp = await client.get(
                 "https://en.wikipedia.org/w/api.php",
                 params={
