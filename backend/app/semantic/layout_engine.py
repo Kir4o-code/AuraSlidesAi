@@ -606,26 +606,21 @@ def _layout_quote_slide(slide, spacing_scale: float) -> list[LayoutElement]:
         elements.append(_text_element(element_id=f"{slide.id}_notes", region="notes", x=notes_x, y=max(quote_y, 540), width=notes_width, text=slide.notes, font_size=notes_font, align=Alignment.CENTER, min_height=notes_h, note="notes"))
     return elements
 
+LAYOUT_RENDERERS = {
+    "title.centered": _layout_title_slide,
+    "content.bullets": _layout_bullets_slide,
+    "content.image_split": _layout_image_bullets_slide,
+    "hero.focus": _layout_hero_image_slide,
+    "comparison.split": _layout_comparison_slide,
+    "timeline.stacked": _layout_timeline_slide,
+    "statistics.grid": _layout_statistics_slide,
+    "quote.centered": _layout_quote_slide,
+}
+
+
 def _layout_slide(slide, debug_mode: bool, spacing_scale: float) -> LayoutedSlide:
     layout_name = slide.layout_name
-    if layout_name == "title.centered":
-        elements = _layout_title_slide(slide, spacing_scale)
-    elif layout_name == "content.bullets":
-        elements = _layout_bullets_slide(slide, spacing_scale)
-    elif layout_name == "content.image_split":
-        elements = _layout_image_bullets_slide(slide, spacing_scale)
-    elif layout_name == "hero.focus":
-        elements = _layout_hero_image_slide(slide, spacing_scale)
-    elif layout_name == "comparison.split":
-        elements = _layout_comparison_slide(slide, spacing_scale)
-    elif layout_name == "timeline.stacked":
-        elements = _layout_timeline_slide(slide, spacing_scale)
-    elif layout_name == "statistics.grid":
-        elements = _layout_statistics_slide(slide, spacing_scale)
-    elif layout_name == "quote.centered":
-        elements = _layout_quote_slide(slide, spacing_scale)
-    else:
-        elements = _layout_bullets_slide(slide, spacing_scale)
+    elements = LAYOUT_RENDERERS.get(layout_name, _layout_bullets_slide)(slide, spacing_scale)
 
     return LayoutedSlide(
         slide_id=slide.id,

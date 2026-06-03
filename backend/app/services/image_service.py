@@ -67,10 +67,13 @@ def _research_prompt(slide: Any, presentation_title: str) -> str:
         intent = "official image"
     parts = [title, presentation_title, *bullets[:2], prompt, mood, intent]
     unique: list[str] = []
+    seen: set[str] = set()
     for part in parts:
         cleaned = " ".join(part.split()).rstrip(" .,:;")
-        if cleaned and cleaned.lower() not in {value.lower() for value in unique}:
+        key = cleaned.lower()
+        if cleaned and key not in seen:
             unique.append(cleaned)
+            seen.add(key)
     return ". ".join(unique)[:500]
 
 

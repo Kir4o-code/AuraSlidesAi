@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 import logging
 
@@ -20,8 +19,6 @@ app = FastAPI(
     version="0.1.0",
     description="MVP API for AI-assisted, layout-based presentation generation.",
 )
-
-frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 
 app.add_middleware(
     CORSMiddleware,

@@ -81,6 +81,8 @@ export function PresentationPreview({
     );
   }
 
+  const tokens = resolveThemeTokens(result.presentation.theme);
+
   return (
     <div className="surface-panel sharp-panel p-6">
       <div className="flex flex-col gap-3 border-b border-white/10 pb-5 md:flex-row md:items-center md:justify-between">
@@ -135,7 +137,7 @@ export function PresentationPreview({
             Background
           </p>
           <p className="mt-2 text-sm font-medium text-white">
-            {resolveThemeTokens(result.presentation.theme).background}
+            {tokens.background}
           </p>
         </div>
         <div className="sharp-control border border-white/10 bg-white/[0.03] p-4">
@@ -143,7 +145,7 @@ export function PresentationPreview({
             Font
           </p>
           <p className="mt-2 text-sm font-medium text-white">
-            {resolveThemeTokens(result.presentation.theme).fontFamily}
+            {tokens.fontFamily}
           </p>
         </div>
       </div>

@@ -122,36 +122,22 @@ class Slide(BaseModel):
 
     @model_validator(mode="after")
     def validate_slide_payload(self) -> "Slide":
-        if self.type == SlideType.TITLE_SLIDE:
-            if not self.title:
-                raise ValueError("Title slides need a title.")
-        elif self.type == SlideType.TITLE_BULLETS:
-            if not self.title or len(self.bullets) < 2:
-                raise ValueError("Bullet slides need a title and at least two bullets.")
-        elif self.type == SlideType.TITLE_BULLETS_IMAGE:
-            if not self.title or len(self.bullets) < 2 or not self.image_prompt:
-                raise ValueError("Image bullet slides need a title, bullets, and an image prompt.")
-        elif self.type == SlideType.HERO_IMAGE:
-            if not self.title or not self.image_prompt:
-                raise ValueError("Hero image slides need a title and an image prompt.")
-        elif self.type == SlideType.COMPARISON:
-            if (
-                not self.title
-                or not self.left_title
-                or not self.right_title
-                or len(self.left_bullets) < 1
-                or len(self.right_bullets) < 1
-            ):
-                raise ValueError("Comparison slides need both sides populated.")
-        elif self.type == SlideType.TIMELINE:
-            if not self.title or len(self.timeline) < 2:
-                raise ValueError("Timeline slides need at least two milestones.")
-        elif self.type == SlideType.STATISTICS:
-            if not self.title or len(self.statistics) < 1:
-                raise ValueError("Statistics slides need at least one statistic.")
-        elif self.type == SlideType.QUOTE:
-            if not self.quote:
-                raise ValueError("Quote slides need quote text.")
+        rules = {
+            SlideType.TITLE_SLIDE: (self.title, "Title slides need a title."),
+            SlideType.TITLE_BULLETS: (self.title and len(self.bullets) >= 2, "Bullet slides need a title and at least two bullets."),
+            SlideType.TITLE_BULLETS_IMAGE: (self.title and len(self.bullets) >= 2 and self.image_prompt, "Image bullet slides need a title, bullets, and an image prompt."),
+            SlideType.HERO_IMAGE: (self.title and self.image_prompt, "Hero image slides need a title and an image prompt."),
+            SlideType.COMPARISON: (
+                self.title and self.left_title and self.right_title and self.left_bullets and self.right_bullets,
+                "Comparison slides need both sides populated.",
+            ),
+            SlideType.TIMELINE: (self.title and len(self.timeline) >= 2, "Timeline slides need at least two milestones."),
+            SlideType.STATISTICS: (self.title and self.statistics, "Statistics slides need at least one statistic."),
+            SlideType.QUOTE: (self.quote, "Quote slides need quote text."),
+        }
+        valid, message = rules[self.type]
+        if not valid:
+            raise ValueError(message)
         return self
 
 
