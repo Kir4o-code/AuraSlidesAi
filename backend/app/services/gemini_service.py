@@ -171,21 +171,29 @@ CRITICAL RULES:
 11. OPINION: When the request asks for favorites, recommendations, or personal judgment, choose specific examples and explain why they stand out. Avoid generic praise, put some work in the actual research of the topic/asked question so you have context of the actual theme so you can make a beautiful argumented analys so people get in your place and take your point, see that youve actually put your own thought, so they wont guess an ai researched it
 12. NARRATIVE: Give slides intentional roles such as hook, context, world or mechanism, evidence, comparison, favorite examples, personal take, frequently asked questions(faq) if more technological/scientifical topic where you revise logic and explain another intuitionss
 13. METADATA: Set visual_mood to a short topic-specific art direction and icon_intent to a short semantic concept for each non-title slide.
+14. TITLE DISCIPLINE: Preserve the user's requested topic as the presentation title when it is short. Do not turn a simple topic like "dnk" or "DNA" into a poetic title with a colon unless the user asked for that tone.
+15. COMPARISONS: Give both sides specific names. Never leave comparison headings as "Option A", "Option B", "Alternative", "Left", or "Right".
 
 IMAGE PROMPT RULES (EXTREMELY IMPORTANT):
+- Always write image_prompt in English, even when the slide text is in another language.
+- Keep image_prompt as a simple searchable English noun phrase or short literal scene. For "dnk"/"DNA", use "DNA" or "DNA double helix", not translated or poetic slide titles.
 - Image prompts must feel like they belong in a polished presentation, not an AI art gallery.
 - Prefer grounded editorial visuals: realistic scenes, relevant objects, clean environments, charts, product/process context, or restrained diagrams.
 - Think logically about the slide: ask for the image a presenter would actually place beside that point.
 - The image must illustrate the slide's actual claim, mechanism, example, or comparison, not just the general topic.
+- Write image prompts as short, literal visual briefs that can be sent directly either to an image generator or an image researcher.
 - Prefer one concrete subject or scene per slide. Do not blend unrelated concepts into one image.
 - When a slide mentions a process, show the process. When it mentions a person, place, event, object, or document, show that exact thing.
 - If the slide is abstract, choose a concrete real-world scene or object that directly explains it.
+- Do not use metaphors, symbolism, allegory, poetic framing, or "representing/symbolizing" language.
+- Avoid prompts about "the feeling of" a topic. Ask for visible things only.
 - Avoid "8k", camera flex, hype words, floating icons, surreal metaphors, generic neural networks, random math symbols, and glowing abstract backgrounds.
 - Do not ask for visible text, labels, captions, UI copy, or words inside the image unless the slide truly needs a simple chart-like visual.
 - For sensitive topics, keep visuals respectful, realistic, and non-sensational.
 - For every image-backed slide, set image_class to exactly one of: photo, diagram, illustration, icon.
 - Preserve named people, characters, places, works, objects, and events inside image prompts so external image research can search precisely.
 - Do not default to decorative lab photos, random office workers, or generic technology screens unless the slide is specifically about those scenes.
+- Keep image prompts compact and searchable. Avoid long descriptive sentences when a direct noun phrase or short scene description is enough.
 - Use photo for real people, places, objects, historical/documentary topics, or editorial visuals.
 - Use diagram for explanatory structures, systems, charts, flows, anatomy, maps, and timelines.
 - Use illustration for drawn/vector educational visuals that are not strict diagrams.
@@ -275,11 +283,117 @@ def _normalize_attribution(value: str | None, presentation_title: str | None, *,
     return _trim_text(presentation_title, limit)
 
 
+ENGLISH_VISUAL_ALIAS_RULES: tuple[tuple[str, str], ...] = (
+    (r"\bднк\b|\bdnk\b", "DNA"),
+    (r"\bрнк\b|\brnk\b", "RNA"),
+    (r"\bдвойна\s+спирала\b", "double helix"),
+    (r"\bструктура(?:та)?\b", "structure"),
+    (r"\bмолекул(?:а|ата)?\b", "molecule"),
+    (r"\bмолекулн(?:а|ата|и)?\b", "molecular"),
+    (r"\bген(?:и|ът|а)?\b", "gene"),
+    (r"\bгенетик(?:а|ата|ата)?\b", "genetics"),
+    (r"\bхромозом(?:а|и|ите)?\b", "chromosome"),
+    (r"\bклетк(?:а|и|ите)?\b", "cell"),
+    (r"\bядро(?:то)?\b", "nucleus"),
+    (r"\bбиолог(?:ия|ията|ичен|ична|ични|ично)?\b", "biology"),
+    (r"\bорганиз(?:ъм|ми|мите)?\b", "organism"),
+    (r"\bпротеин(?:ът|и|ите)?\b", "protein"),
+    (r"\bпротеинов(?:а|ата|и|о)?\b", "protein"),
+    (r"\bбелтък(?:ът|ци|ците)?\b", "protein"),
+    (r"\bензим(?:ът|и|ите)?\b", "enzyme"),
+    (r"\bвирус(?:ът|и|ите)?\b", "virus"),
+    (r"\bбактери(?:я|и|ите)?\b", "bacteria"),
+    (r"\bаденин\b", "adenine"),
+    (r"\bтимин\b", "thymine"),
+    (r"\bгуанин\b", "guanine"),
+    (r"\bцитозин\b", "cytosine"),
+    (r"\bводородни\s+връзки\b", "hydrogen bonds"),
+    (r"\bбългария\b", "Bulgaria"),
+    (r"\bбългарски(?:ят|я|и)?\b", "Bulgarian"),
+    (r"\bсъветски(?:ят|я|и)?\b", "Soviet"),
+    (r"\bссср\b", "Soviet Union"),
+    (r"\bтодор\s+живков\b", "Todor Zhivkov"),
+    (r"\bмихаил\s+горбачов\b", "Mikhail Gorbachev"),
+    (r"\bгорбачов\b", "Gorbachev"),
+    (r"\bперестройка\b", "perestroika"),
+    (r"\bизточна\s+европа\b", "Eastern Europe"),
+    (r"\bстудената\s+война\b", "Cold War"),
+    (r"\bкомуниз(?:ъм|ма)\b", "communism"),
+    (r"\bсоциализ(?:ъм|ма)\b", "socialism"),
+    (r"\bпланирана\s+икономика\b", "planned economy"),
+    (r"\bиндустриализация\b", "industrialization"),
+    (r"\bземеделие\b", "agriculture"),
+    (r"\bикономик(?:а|ата|чески)\b", "economy"),
+    (r"\bполитически\b", "political"),
+    (r"\bреформи\b", "reforms"),
+    (r"\bреволюци(?:я|ята)\b", "revolution"),
+    (r"\bвойна\b", "war"),
+    (r"\bучилище\b", "school"),
+    (r"\bобразование\b", "education"),
+    (r"\bученици\b", "students"),
+)
+
+IMAGE_PROMPT_STOPWORDS = {
+    "presentation", "visual", "literal", "supporting", "editorial", "realistic", "clean", "modern",
+    "scene", "object", "process", "show", "relevant", "grounded", "restrained", "style", "text",
+    "without", "with", "for", "and", "the", "this", "that", "slide", "topic", "overview",
+}
+
+
+def english_visual_search_phrase(*parts: str | None, limit_words: int = 8, max_length: int = 80) -> str:
+    text = " ".join(str(part).strip() for part in parts if part and str(part).strip())
+    if not text:
+        return ""
+    for pattern, replacement in ENGLISH_VISUAL_ALIAS_RULES:
+        text = re.sub(pattern, f" {replacement} ", text, flags=re.IGNORECASE)
+    words: list[str] = []
+    seen: set[str] = set()
+    for word in re.findall(r"[A-Za-z][A-Za-z0-9&'+-]*", text):
+        normalized = word.lower().strip("-'+")
+        if len(normalized) < 2 or normalized in IMAGE_PROMPT_STOPWORDS or normalized in seen:
+            continue
+        seen.add(normalized)
+        words.append("DNA" if normalized == "dna" else "RNA" if normalized == "rna" else word)
+        if len(words) >= limit_words:
+            break
+    phrase = " ".join(words).strip()
+    return phrase[:max_length].strip()
+
+
+def _english_only_image_prompt(value: str, fallback: str = "presentation topic") -> str:
+    prompt = english_visual_search_phrase(value, limit_words=8, max_length=90)
+    if not prompt:
+        prompt = english_visual_search_phrase(fallback, limit_words=8, max_length=90)
+    prompt = re.sub(r"[^A-Za-z0-9 &'+-]", " ", prompt)
+    prompt = re.sub(r"\s+", " ", prompt).strip()
+    return prompt or "presentation topic"
+
+
+def _simple_english_visual_subject(
+    raw_prompt: str | None,
+    title: str | None,
+    presentation_title: str,
+    subtitle: str | None,
+    bullets: list[str] | None,
+) -> str:
+    joined = " ".join(str(part or "") for part in [raw_prompt, title, subtitle, *(bullets or [])[:3], presentation_title])
+    phrase = english_visual_search_phrase(raw_prompt, title, subtitle, *((bullets or [])[:3]), presentation_title, limit_words=8, max_length=72)
+    lower_phrase = phrase.lower()
+    lower_joined = joined.lower()
+    if "dna" in lower_phrase:
+        if any(term in lower_phrase for term in ("adenine", "thymine", "guanine", "cytosine", "hydrogen")):
+            return "DNA base pairs"
+        if "structure" in lower_phrase or "double helix" in lower_joined or "структура" in lower_joined:
+            return "DNA double helix"
+        return "DNA"
+    if "rna" in lower_phrase:
+        return "RNA molecule"
+    return phrase or "presentation topic"
+
+
 def _fallback_image_prompt(title: str | None, presentation_title: str, *, slide_type: str = "supporting") -> str:
-    topic = title or presentation_title or "the slide topic"
-    if slide_type == SlideType.HERO_IMAGE.value:
-        return f"Grounded editorial visual introducing {topic}, realistic and presentation-ready, no text."
-    return f"Grounded supporting visual for {topic}, realistic or clean editorial style, no text."
+    topic = english_visual_search_phrase(title, presentation_title, limit_words=6, max_length=60) or "presentation topic"
+    return topic
 
 
 def _supporting_visual_context(
@@ -318,6 +432,14 @@ def _normalize_image_prompt(
     ):
         base = _fallback_image_prompt(title, presentation_title, slide_type=slide_type)
     for pattern in [
+        r"\bsymboli[sz]ing\b.*",
+        r"\brepresenting\b.*",
+        r"\bmetaphor(?:ical)?\b.*",
+        r"\ballegor(?:y|ical)\b.*",
+        r"\bconceptual\b.*",
+    ]:
+        base = re.sub(pattern, "", base, flags=re.IGNORECASE)
+    for pattern in [
         r"\b8k\b",
         r"\b4k\b",
         r"\bultra[- ]?high[- ]?resolution\b",
@@ -333,16 +455,9 @@ def _normalize_image_prompt(
     base = re.sub(r",\s*,+", ",", base)
     base = re.sub(r"\s+", " ", base).strip(" ,.")
 
-    topic = title or presentation_title or "this slide"
-    context = _supporting_visual_context(title, subtitle, bullets)
-    prompt = (
-        f"Presentation visual for '{topic}': {base}. "
-        f"Slide context: {context}. "
-        "Show the most relevant concrete scene, object, person, place, or process from the slide context. "
-        "Keep it grounded, relevant, and restrained. Match a clean modern deck. "
-        "No visible words, labels, captions, logos, surreal symbols, generic technology screens, or generic AI abstractions."
-    )
-    return prompt[:500].rstrip(" ,.")
+    subject = _simple_english_visual_subject(base, title, presentation_title, subtitle, bullets)
+    fallback = english_visual_search_phrase(title, subtitle, *((bullets or [])[:2]), presentation_title, limit_words=8, max_length=90)
+    return _english_only_image_prompt(subject, fallback=fallback)
 
 
 def _normalize_image_class(value: str | None, prompt: str | None, *, default: ImageClass = ImageClass.PHOTO) -> str:
@@ -387,23 +502,52 @@ def _fallback_slide_title(presentation_title: str, index: int, *, variant: str =
     return options[(index - 1) % len(options)]
 
 
+def _has_cyrillic(text: str) -> bool:
+    return bool(re.search(r"[А-Яа-яЁё]", text))
+
+
+def _localized_label(english: str, bulgarian: str, context: str) -> str:
+    return bulgarian if _has_cyrillic(context) else english
+
+
+def _heading_from_first_bullet(bullets: list[str], fallback: str) -> str:
+    for bullet in bullets:
+        cleaned = re.sub(r"\s+", " ", bullet).strip(" .,:;")
+        if not cleaned:
+            continue
+        if ":" in cleaned:
+            left = cleaned.split(":", 1)[0].strip()
+            if 3 <= len(left) <= 42:
+                return left
+        words = cleaned.split()
+        if 1 <= len(words) <= 4 and len(cleaned) <= 42:
+            return cleaned
+    return fallback
+
+
 def _infer_comparison_title(existing: str | None, bullets: list[str], fallback: str) -> str:
     normalized = _trim_text(existing, 120)
-    if normalized and normalized.lower() not in {"option a", "option b", "left", "right"}:
+    placeholders = {
+        "option a", "option b", "option one", "option two", "alternative", "variant a", "variant b",
+        "choice a", "choice b", "left", "right", "first", "second",
+    }
+    if normalized and normalized.lower() not in placeholders:
         return normalized
 
     combined = " ".join(bullets).lower()
     keyword_map = [
-        (("gemini", "generated", "generate", "ai", "custom", "unique"), "AI Generation"),
-        (("unsplash", "stock", "editorial", "realistic scene", "photography", "photo library"), "Unsplash"),
-        (("manual", "designer", "handmade", "curated"), "Manual Design"),
-        (("diagram", "chart", "structured", "explain"), "Diagrams"),
-        (("photo", "photos", "real world", "documentary"), "Photography"),
+        (("adenine", "thymine", "аденин", "тимин", "two hydrogen", "две водородни"), ("Adenine and Thymine", "Аденин и Тимин")),
+        (("guanine", "cytosine", "гуанин", "цитозин", "three hydrogen", "три водородни", "стабилност"), ("Guanine and Cytosine", "Гуанин и Цитозин")),
+        (("gemini", "generated", "generate", "ai", "custom", "unique", "генерира"), ("AI Generation", "AI генериране")),
+        (("unsplash", "stock", "editorial", "realistic scene", "photography", "photo library", "стокови"), ("Stock Images", "Стокови изображения")),
+        (("manual", "designer", "handmade", "curated"), ("Manual Design", "Ръчен дизайн")),
+        (("diagram", "chart", "structured", "explain", "диаграма"), ("Diagrams", "Диаграми")),
+        (("photo", "photos", "real world", "documentary", "снимки"), ("Photography", "Фотография")),
     ]
-    for terms, label in keyword_map:
+    for terms, labels in keyword_map:
         if any(term in combined for term in terms):
-            return label
-    return fallback
+            return _localized_label(labels[0], labels[1], combined)
+    return _heading_from_first_bullet(bullets, fallback)
 
 
 def _normalize_timeline(steps: list[GeminiTimelineStep]) -> list[GeminiTimelineStep]:
@@ -556,14 +700,28 @@ def _fallback_plan_from_request(
             )
         )
 
-    return _normalize_plan(GeminiPresentationPlan(title=title, theme=style, slides=slides), slide_count, slide_outline)
+    return _normalize_plan(GeminiPresentationPlan(title=title, theme=style, slides=slides), slide_count, slide_outline, source_prompt=prompt)
+
+
+def _requested_topic_title(prompt: str | None) -> str | None:
+    cleaned = re.sub(r"\s+", " ", (prompt or "")).strip(" .,:;")
+    if not cleaned:
+        return None
+    if len(cleaned) <= 40 and len(cleaned.split()) <= 4 and not re.search(r"[.!?;]", cleaned):
+        return cleaned
+    return None
 
 
 def _normalize_plan(
     plan: GeminiPresentationPlan,
     slide_count: int,
     slide_outline: list[GuidedSlideIntent] | None = None,
+    source_prompt: str | None = None,
 ) -> GeminiPresentationPlan:
+    requested_title = _requested_topic_title(source_prompt)
+    if requested_title:
+        plan.title = requested_title
+
     slides = list(plan.slides[:slide_count])
     guided = bool(slide_outline)
 
@@ -605,6 +763,16 @@ def _normalize_plan(
         _normalize_slide_plan(slide, plan.title, index + 1)
         for index, slide in enumerate(slides)
     ]
+    if requested_title and normalized_slides:
+        first = normalized_slides[0]
+        first_title = (first.title or "").strip()
+        if (
+            first.type == SlideType.TITLE_SLIDE.value
+            and first_title
+            and first_title.lower() != requested_title.lower()
+            and (":" in first_title or len(first_title) > len(requested_title) + 14)
+        ):
+            first.title = requested_title
 
     seen_signatures: set[tuple[Any, ...]] = set()
     for index, slide in enumerate(normalized_slides, start=1):
@@ -768,6 +936,9 @@ CONTENT RULES:
 - Adapt the voice to the subject and audience. Write with an intentional point of view.
 - When the brief asks for favorites or opinions, choose specific examples and explain the judgment.
 - For school assignments, stay clear and accurate but avoid lifeless textbook phrasing.
+- If the topic is a short phrase or acronym, keep the presentation title that short; do not add a poetic subtitle into the title.
+- Comparison slides must have real side names, not "Option B" or "Alternative".
+- image_prompt must always be short English only, even when slide titles and bullets are in another language.
 - Add visual_mood and icon_intent metadata for every non-title slide.
 - Allowed slide types: title_slide, title_bullets, title_bullets_image, hero_image, comparison, timeline, statistics, quote.
 
@@ -786,13 +957,6 @@ Return JSON only.
     planning_error: Exception | None = None
     response_text = ""
     plan: GeminiPresentationPlan | None = None
-    for attempt in range(2):
-        attempt_prompt = user_prompt
-        if attempt == 1:
-            attempt_prompt = f"{user_prompt}\n\n{_planning_retry_instruction(slide_count)}"
-
-    planning_error: Exception | None = None
-    response_text = ""
     for attempt in range(2):
         attempt_prompt = user_prompt if attempt == 0 else f"{user_prompt}\n\n{_planning_retry_instruction(slide_count)}"
         try:
@@ -843,7 +1007,7 @@ Return JSON only.
     else:  # pragma: no cover - defensive loop guard
         raise GeminiPlanningError("Gemini returned invalid presentation JSON.") from planning_error
 
-    normalized_plan = _normalize_plan(plan, slide_count, slide_outline if planning_mode == PlanningMode.GUIDED else None)
+    normalized_plan = _normalize_plan(plan, slide_count, slide_outline if planning_mode == PlanningMode.GUIDED else None, source_prompt=prompt)
     presentation = _plan_to_presentation(normalized_plan)
     logger.info(
         "Gemini planning complete. title=%s slides=%s types=%s theme=%s",

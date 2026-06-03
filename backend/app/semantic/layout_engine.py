@@ -68,8 +68,9 @@ def _item_field(item, field_name: str, default=None):
 def _estimate_chars_per_line(width: int, font_size: int) -> int:
     if font_size <= 0:
         return 1
-    # Be slightly conservative so exported text rows reserve enough height.
-    return max(10, int(width / max(font_size * 0.50, 1)))
+    # Exported PPT text, especially Cyrillic at large sizes, is wider than the
+    # preview estimate. Reserve extra height so following elements never collide.
+    return max(8, int(width / max(font_size * 0.58, 1)))
 
 
 def _estimate_lines(text: str, width: int, font_size: int) -> int:
@@ -329,22 +330,22 @@ def _panel_element(
 
 def _layout_title_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
     width = _available_width()
-    title_font = _scale_type(70, typography_scale, 66)
-    subtitle_font = _scale_type(28, typography_scale, 24)
+    title_font = _scale_type(_fit_font_size(66, slide.title or "", 38, 66), typography_scale, 34)
+    subtitle_font = _scale_type(_fit_font_size(28, slide.subtitle or "", 18, 28), typography_scale, 18)
     notes_font = _scale_type(19, typography_scale, 16)
-    y = 138
+    y = 112
     elements: list[LayoutElement] = []
 
     if slide.title:
-        title_height, _, _ = _text_height(slide.title, width, title_font, min_height=92)
-        title_gap = _gap(24, spacing_scale, 18)
+        title_font, title_height = _fit_text_block(slide.title, width, title_font, min_font_size=34, max_height=260, min_height=92, padding_y=8)
+        title_gap = _gap(30, spacing_scale, 22)
         elements.append(_text_element(element_id=f"{slide.id}_title", region="title", x=MARGIN_X, y=y, width=width, text=slide.title, font_size=title_font, align=Alignment.CENTER, min_height=title_height, spacing_after=title_gap, note="title"))
         y += title_height + title_gap
 
     if slide.subtitle:
         subtitle_width = min(960, width)
         subtitle_x = (CANVAS_WIDTH - subtitle_width) // 2
-        subtitle_height, _, _ = _text_height(slide.subtitle, subtitle_width, subtitle_font, min_height=40)
+        subtitle_font, subtitle_height = _fit_text_block(slide.subtitle, subtitle_width, subtitle_font, min_font_size=16, max_height=96, min_height=44, padding_y=4)
         subtitle_gap = _gap(18, spacing_scale, 14)
         elements.append(_text_element(element_id=f"{slide.id}_subtitle", region="subtitle", x=subtitle_x, y=y, width=subtitle_width, text=slide.subtitle, font_size=subtitle_font, align=Alignment.CENTER, min_height=subtitle_height, spacing_after=subtitle_gap, note="subtitle"))
         y += subtitle_height + subtitle_gap
@@ -360,21 +361,21 @@ def _layout_title_slide(slide, spacing_scale: float, typography_scale: float) ->
 
 def _layout_title_left_feature_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
     width = _available_width()
-    title_font = _scale_type(66, typography_scale, 62)
-    subtitle_font = _scale_type(26, typography_scale, 22)
+    title_font = _scale_type(_fit_font_size(62, slide.title or "", 34, 62), typography_scale, 32)
+    subtitle_font = _scale_type(_fit_font_size(26, slide.subtitle or "", 17, 26), typography_scale, 17)
     notes_font = _scale_type(18, typography_scale, 16)
-    y = 128
+    y = 104
     elements: list[LayoutElement] = []
 
     if slide.title:
         title_width = min(760, width)
-        title_height, _, _ = _text_height(slide.title, title_width, title_font, min_height=96)
+        title_font, title_height = _fit_text_block(slide.title, title_width, title_font, min_font_size=32, max_height=260, min_height=96, padding_y=8)
         elements.append(_text_element(element_id=f"{slide.id}_title", region="title", x=MARGIN_X, y=y, width=title_width, text=slide.title, font_size=title_font, align=Alignment.START, min_height=title_height, note="title"))
-        y += title_height + _gap(24, spacing_scale, 18)
+        y += title_height + _gap(30, spacing_scale, 22)
 
     if slide.subtitle:
         subtitle_width = min(640, width)
-        subtitle_height, _, _ = _text_height(slide.subtitle, subtitle_width, subtitle_font, min_height=42)
+        subtitle_font, subtitle_height = _fit_text_block(slide.subtitle, subtitle_width, subtitle_font, min_font_size=16, max_height=112, min_height=44, padding_y=4)
         elements.append(_text_element(element_id=f"{slide.id}_subtitle", region="subtitle", x=MARGIN_X, y=y, width=subtitle_width, text=slide.subtitle, font_size=subtitle_font, align=Alignment.START, min_height=subtitle_height, note="subtitle"))
         y += subtitle_height + _gap(18, spacing_scale, 14)
 
@@ -462,8 +463,8 @@ def _layout_image_bullets_slide(slide, spacing_scale: float, typography_scale: f
 
     left_children: list[LayoutElement] = []
     if slide.title:
-        title_height, _, _ = _text_height(slide.title, inner_width, title_font, min_height=72, padding_y=6)
-        title_gap = _gap(36, spacing_scale, 28)
+        title_font, title_height = _fit_text_block(slide.title, inner_width, title_font, min_font_size=20, max_height=170, min_height=72, padding_y=8)
+        title_gap = _gap(42, spacing_scale, 32)
         left_children.append(_text_element(element_id=f"{slide.id}_title", region="title", x=0, y=0, width=inner_width, text=slide.title, font_size=title_font, align=Alignment.START, min_height=title_height, spacing_after=title_gap, note="title"))
         offset_y = title_height + title_gap
     else:
@@ -526,9 +527,9 @@ def _layout_image_focus_split_slide(slide, spacing_scale: float, typography_scal
     left_children: list[LayoutElement] = []
     y = 0
     if slide.title:
-        title_height, _, _ = _text_height(slide.title, inner_width, title_font, min_height=54)
+        title_font, title_height = _fit_text_block(slide.title, inner_width, title_font, min_font_size=20, max_height=150, min_height=60, padding_y=6)
         left_children.append(_text_element(element_id=f"{slide.id}_title", region="title", x=0, y=y, width=inner_width, text=slide.title, font_size=title_font, align=Alignment.START, min_height=title_height, note="title"))
-        y += title_height + _gap(26, spacing_scale, 18)
+        y += title_height + _gap(34, spacing_scale, 24)
     if slide.bullets:
         bullets = _bullet_list_element(
             element_id=f"{slide.id}_bullets",
@@ -583,19 +584,19 @@ def _layout_hero_image_slide(slide, spacing_scale: float, typography_scale: floa
     left_width = 468
     right_x = 616
     right_width = 580
-    title_font = _scale_type(44, typography_scale, 38)
-    subtitle_font = _scale_type(24, typography_scale, 20)
+    title_font = _scale_type(_fit_font_size(44, slide.title or "", 28, 44), typography_scale, 26)
+    subtitle_font = _scale_type(_fit_font_size(24, slide.subtitle or "", 16, 24), typography_scale, 16)
     notes_font = _scale_type(17, typography_scale, 15)
 
     left_children: list[LayoutElement] = []
     y = 168
     title_offset = 0
     if slide.title:
-        title_height, _, _ = _text_height(slide.title, left_width, title_font, min_height=60)
+        title_font, title_height = _fit_text_block(slide.title, left_width, title_font, min_font_size=24, max_height=180, min_height=68, padding_y=6)
         left_children.append(_text_element(element_id=f"{slide.id}_title", region="title", x=0, y=0, width=left_width, text=slide.title, font_size=title_font, align=Alignment.START, min_height=title_height, note="hero title"))
-        title_offset = title_height + _gap(20, spacing_scale, 14)
+        title_offset = title_height + _gap(28, spacing_scale, 20)
     if slide.subtitle:
-        subtitle_height, _, _ = _text_height(slide.subtitle, left_width, subtitle_font, min_height=40)
+        subtitle_font, subtitle_height = _fit_text_block(slide.subtitle, left_width, subtitle_font, min_font_size=15, max_height=96, min_height=42, padding_y=4)
         left_children.append(_text_element(element_id=f"{slide.id}_subtitle", region="subtitle", x=0, y=title_offset, width=left_width, text=slide.subtitle, font_size=subtitle_font, align=Alignment.START, min_height=subtitle_height, note="hero subtitle"))
         y += subtitle_height + _gap(16, spacing_scale, 12)
     if slide.notes:

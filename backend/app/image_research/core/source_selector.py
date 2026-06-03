@@ -111,6 +111,24 @@ CONCEPT_HINTS = {
     "artificial intelligence",
     "technology",
 }
+SCIENTIFIC_STRUCTURE_HINTS = {
+    "dna",
+    "rna",
+    "double helix",
+    "base pair",
+    "base pairs",
+    "nucleotide",
+    "nucleotides",
+    "ribosome",
+    "ribosomal",
+    "rrna",
+    "adenine",
+    "thymine",
+    "guanine",
+    "cytosine",
+    "molecular structure",
+    "cell structure",
+}
 
 BULGARIAN_PERSON_HINTS = {
     "учен",
@@ -169,6 +187,20 @@ BULGARIAN_CONCEPT_HINTS = {
     "природа",
     "технологии",
     "изкуствен интелект",
+}
+BULGARIAN_SCIENTIFIC_STRUCTURE_HINTS = {
+    "днк",
+    "рнк",
+    "двойна спирала",
+    "базови двойки",
+    "нуклеотид",
+    "рибозома",
+    "рибозомна",
+    "аденин",
+    "тимин",
+    "гуанин",
+    "цитозин",
+    "молекулна структура",
 }
 
 GENERIC_ENTITY_WORDS = {
@@ -298,6 +330,7 @@ def _looks_like_named_entity(value: str) -> bool:
 
 def select_image_source_with_reason(prompt: str, secondary_text: str | None = None) -> tuple[ImageSourceSelection, str]:
     original = _token_text(" ".join(part for part in [prompt, secondary_text or ""] if part))
+    primary_lowered = _token_text(prompt).lower()
     lowered = original.lower()
     query = _entity_query(prompt)
     title_case_words = max(_title_case_count(prompt), _capitalized_token_count(query))
@@ -307,6 +340,31 @@ def select_image_source_with_reason(prompt: str, secondary_text: str | None = No
     organization_hints = ORGANIZATION_HINTS | BULGARIAN_ORGANIZATION_HINTS
     place_hints = PLACE_HINTS | BULGARIAN_PLACE_HINTS
     event_hints = EVENT_HINTS | BULGARIAN_EVENT_HINTS
+    scientific_structure_hints = SCIENTIFIC_STRUCTURE_HINTS | BULGARIAN_SCIENTIFIC_STRUCTURE_HINTS
+
+    if _has_any(lowered, scientific_structure_hints):
+        primary_mentions_rna = "rna" in primary_lowered or "рнк" in primary_lowered
+        primary_mentions_dna = "dna" in primary_lowered or "днк" in primary_lowered
+        if primary_mentions_rna or (("rna" in lowered or "рнк" in lowered) and not primary_mentions_dna):
+            if any(term in primary_lowered for term in ("vaccine", "therapeutic", "therapy", "crispr", "guide", "transfer", "ribosome", "ribosomal", "transcription", "microrna", "mirna", "sirna", "polymerase")):
+                query = compact_search_query(prompt, max_length=60)
+            else:
+                query = "RNA molecule" if "molecule" in lowered or "молекул" in lowered else "RNA"
+        elif primary_mentions_dna or "dna" in lowered or "днк" in lowered:
+            if any(term in primary_lowered for term in ("base pair", "base pairs", "adenine", "thymine", "guanine", "cytosine", "базови", "аденин", "тимин", "гуанин", "цитозин")):
+                query = "DNA base pairs"
+            elif "helix" in primary_lowered or "спирала" in primary_lowered:
+                query = "DNA double helix"
+            else:
+                query = "DNA"
+        else:
+            query = compact_search_query(original or prompt, max_length=60)
+        return ImageSourceSelection(
+            entity_type=EntityType.PRODUCT,
+            image_source=ResearchImageSource.WIKIPEDIA,
+            search_query=query,
+            confidence=0.86,
+        ), "matched scientific structure; using encyclopedia media first"
 
     if _has_any(lowered, concept_hints):
         return ImageSourceSelection(

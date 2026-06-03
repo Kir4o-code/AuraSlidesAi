@@ -44,6 +44,24 @@ WIKIMEDIA_HEADERS = {
     "Accept": "application/json; charset=utf-8",
 }
 
+STRICT_RELEVANCE_GROUPS: tuple[tuple[set[str], set[str], set[str]], ...] = (
+    (
+        {"dna", "helix", "base", "bases", "pair", "pairs", "adenine", "thymine", "guanine", "cytosine", "genetic", "genetics"},
+        {"dna", "deoxyribonucleic", "helix", "nucleotide", "nucleic", "adenine", "thymine", "guanine", "cytosine", "genetic", "genetics"},
+        {"map", "territory", "territories", "city", "cities", "country", "countries", "region", "regions", "war", "battle"},
+    ),
+    (
+        {"rna", "nucleotide", "nucleic"},
+        {"rna", "ribonucleic", "nucleotide", "nucleic"},
+        {"map", "territory", "city", "country", "region", "war", "battle"},
+    ),
+    (
+        {"ribosome", "ribosomal", "rrna"},
+        {"ribosome", "ribosomal", "rrna", "rna", "protein", "translation"},
+        {"map", "territory", "city", "country", "region", "war", "battle"},
+    ),
+)
+
 
 class ImageResearcher:
     def __init__(self) -> None:
@@ -90,7 +108,7 @@ class ImageResearcher:
                 len(search_plan.alternative_queries),
             )
             classification_input = request.context_text or request.prompt
-            source_selection, selection_reason = select_image_source_with_reason(classification_input, request.prompt)
+            source_selection, selection_reason = select_image_source_with_reason(request.prompt, request.context_text)
             logger.info(
                 "research.source id=%s entity_type=%s source=%s query=%r confidence=%.2f reason=%s classifier_input=%r planner_query=%r",
                 request_id,
@@ -104,17 +122,28 @@ class ImageResearcher:
             )
             candidates = await self._search(search_plan, request, source_selection, warnings)
             raw_count = len(candidates)
-            candidates = self._dedupe(candidates)
             excluded_sources = set(request.exclude_source_urls)
-            candidates = [
-                c for c in candidates
-                if is_allowed_license(c.license_name)
-                and (c.source_url or c.image_url) not in excluded_sources
-            ]
+            candidates, before_relevance = self._prepare_candidates(candidates, request, search_plan, warnings, excluded_sources)
             logger.info("research.candidates id=%s raw=%s licensed=%s", request_id, raw_count, len(candidates))
+            if before_relevance != len(candidates):
+                logger.info("research.relevance id=%s kept=%s rejected=%s", request_id, len(candidates), before_relevance - len(candidates))
             if not candidates:
-                warnings.append("No candidates passed license filtering.")
-                return self._empty(search_plan, warnings)
+                if source_selection.entity_type.value == "PRODUCT" and source_selection.image_source != ResearchImageSource.STOCK:
+                    warnings.append("Entity candidates failed license/relevance filtering; falling back to stock provider.")
+                    stock_candidates = await self._search_stock(search_plan, request, warnings)
+                    stock_raw_count = len(stock_candidates)
+                    candidates, before_relevance = self._prepare_candidates(stock_candidates, request, search_plan, warnings, excluded_sources, strict_relevance=False)
+                    logger.info(
+                        "research.stock_fallback id=%s raw=%s licensed=%s",
+                        request_id,
+                        stock_raw_count,
+                        len(candidates),
+                    )
+                    if before_relevance != len(candidates):
+                        logger.info("research.stock_fallback_relevance id=%s kept=%s rejected=%s", request_id, len(candidates), before_relevance - len(candidates))
+                if not candidates:
+                    warnings.append("No candidates passed license and relevance filtering.")
+                    return self._empty(search_plan, warnings)
 
             ranked = self._rank_before_download(candidates, request, search_plan)
             download_limit = min(max(request.max_candidates * 3, 12), 32)
@@ -127,8 +156,31 @@ class ImageResearcher:
             )
             logger.info("research.downloaded id=%s downloaded=%s limit=%s", request_id, len(downloaded), download_limit)
             if not downloaded:
-                warnings.append("No candidates could be downloaded and validated.")
-                return self._empty(search_plan, warnings)
+                if source_selection.entity_type.value == "PRODUCT" and source_selection.image_source != ResearchImageSource.STOCK:
+                    warnings.append("Entity candidates could not be downloaded; falling back to stock provider.")
+                    stock_candidates = await self._search_stock(search_plan, request, warnings)
+                    stock_raw_count = len(stock_candidates)
+                    stock_candidates, stock_before_relevance = self._prepare_candidates(stock_candidates, request, search_plan, warnings, excluded_sources, strict_relevance=False)
+                    logger.info(
+                        "research.stock_fallback id=%s raw=%s licensed=%s",
+                        request_id,
+                        stock_raw_count,
+                        len(stock_candidates),
+                    )
+                    if stock_before_relevance != len(stock_candidates):
+                        logger.info("research.stock_fallback_relevance id=%s kept=%s rejected=%s", request_id, len(stock_candidates), stock_before_relevance - len(stock_candidates))
+                    ranked = self._rank_before_download(stock_candidates, request, search_plan)
+                    downloaded = await self._download(
+                        ranked[:download_limit],
+                        request_id,
+                        warnings,
+                        max(request.max_candidates * 2, request.max_candidates + 4),
+                        set(request.exclude_hashes),
+                    )
+                    logger.info("research.stock_fallback_downloaded id=%s downloaded=%s", request_id, len(downloaded))
+                if not downloaded:
+                    warnings.append("No candidates could be downloaded and validated.")
+                    return self._empty(search_plan, warnings)
 
             clip_prompts = self._clip_prompts(request, search_plan)
             try:
@@ -464,6 +516,70 @@ class ImageResearcher:
             out.append(candidate)
         return out
 
+    def _prepare_candidates(
+        self,
+        candidates: list[ImageCandidate],
+        request: ImageResearchRequest,
+        plan: SearchPlan,
+        warnings: list[str],
+        excluded_sources: set[str],
+        strict_relevance: bool = True,
+    ) -> tuple[list[ImageCandidate], int]:
+        candidates = self._dedupe(candidates)
+        candidates = [
+            c for c in candidates
+            if is_allowed_license(c.license_name)
+            and (c.source_url or c.image_url) not in excluded_sources
+        ]
+        before_relevance = len(candidates)
+        if strict_relevance:
+            candidates = self._filter_relevant_candidates(candidates, request, plan, warnings)
+        return candidates, before_relevance
+
+    def _candidate_text(self, candidate: ImageCandidate) -> str:
+        return " ".join(
+            [
+                candidate.title or "",
+                candidate.author or "",
+                candidate.source_url or "",
+                " ".join(candidate.tags),
+                " ".join(candidate.categories),
+                candidate.page_title or "",
+            ]
+        ).lower()
+
+    def _strict_relevance_terms(self, request: ImageResearchRequest, plan: SearchPlan) -> tuple[set[str], set[str], set[str]] | None:
+        query_tokens = self._tokens(" ".join([request.prompt, plan.main_query, " ".join(plan.alternative_queries)]))
+        for trigger_terms, required_terms, bad_terms in STRICT_RELEVANCE_GROUPS:
+            if query_tokens & trigger_terms:
+                return trigger_terms, required_terms, bad_terms
+        return None
+
+    def _filter_relevant_candidates(
+        self,
+        candidates: list[ImageCandidate],
+        request: ImageResearchRequest,
+        plan: SearchPlan,
+        warnings: list[str],
+    ) -> list[ImageCandidate]:
+        strict = self._strict_relevance_terms(request, plan)
+        if not strict:
+            return candidates
+        _, required_terms, bad_terms = strict
+        kept: list[ImageCandidate] = []
+        rejected = 0
+        for candidate in candidates:
+            text_tokens = self._tokens(self._candidate_text(candidate))
+            has_required = bool(text_tokens & required_terms)
+            has_bad_only_context = bool(text_tokens & bad_terms) and not has_required
+            if has_required and not has_bad_only_context:
+                kept.append(candidate)
+            else:
+                rejected += 1
+        if rejected:
+            warnings.append(f"Rejected {rejected} off-topic candidate(s) before download.")
+        return kept
+
     def _rank_before_download(
         self,
         candidates: list[ImageCandidate],
@@ -626,16 +742,7 @@ class ImageResearcher:
         request: ImageResearchRequest | None,
         plan: SearchPlan | None,
     ) -> float:
-        text = " ".join(
-            [
-                candidate.title or "",
-                candidate.author or "",
-                candidate.source_url or "",
-                " ".join(candidate.tags),
-                " ".join(candidate.categories),
-                candidate.page_title or "",
-            ]
-        ).lower()
+        text = self._candidate_text(candidate)
         core_text = " ".join(
             [
                 request.prompt if request else "",

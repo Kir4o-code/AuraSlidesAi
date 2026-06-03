@@ -46,6 +46,9 @@ class WikimediaCommonsProvider(BaseImageProvider):
             source_url = page.get("canonicalurl") or f"https://commons.wikimedia.org/?curid={page_id}"
             if not image_url or not source_url:
                 continue
+            original_url = image_info.get("url") or ""
+            if not image_info.get("thumburl") and original_url.lower().split("?", 1)[0].endswith((".ogv", ".webm", ".mp4", ".mp3", ".ogg", ".wav")):
+                continue
             metadata = image_info.get("extmetadata") or {}
             license_name = canonical_license((metadata.get("LicenseShortName") or {}).get("value")) or "CC BY-SA"
             categories = [
@@ -60,7 +63,7 @@ class WikimediaCommonsProvider(BaseImageProvider):
                     id=f"commons-{page_id}",
                     source="wikimedia_commons",
                     title=title,
-                    image_url=image_info.get("url") or image_url,
+                    image_url=image_url,
                     preview_url=image_url,
                     source_url=source_url,
                     author=author,

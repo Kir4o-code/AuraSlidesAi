@@ -13,6 +13,7 @@ from app.schemas.presentation import ImageClass, ImageSource, Presentation, Reso
 from app.services.gemini_service import (
     GeminiImageGenerationError,
     build_image_cache_key,
+    english_visual_search_phrase,
     generate_slide_image,
     get_image_model_name,
 )
@@ -64,6 +65,19 @@ def _infer_research_image_type(prompt: str) -> str:
     return "any"
 
 
+def _research_image_class(slide: Any, prompt: str, context_text: str) -> str:
+    explicit = getattr(getattr(slide, "image_class", None), "value", getattr(slide, "image_class", None))
+    text = " ".join([prompt, context_text, str(getattr(slide, "image_prompt", "") or "")]).lower()
+    if any(term in text for term in ("dna", "rna", "base pairs", "double helix", "nucleotide", "molecule", "structure")):
+        return ImageClass.DIAGRAM.value
+    if explicit in {item.value for item in ImageClass}:
+        return explicit
+    inferred = _infer_research_image_type(text)
+    if inferred in {ImageClass.DIAGRAM.value, ImageClass.ICON.value, ImageClass.ILLUSTRATION.value}:
+        return inferred
+    return ImageClass.PHOTO.value
+
+
 def _extract_scene_from_image_prompt(prompt: str) -> str:
     text = " ".join(prompt.split())
     match = re.search(r"Presentation visual for ['\"]([^'\"]+)['\"]:\s*(.+)", text, flags=re.I)
@@ -98,7 +112,8 @@ def _slide_concept_terms(title: str, bullets: list[str]) -> str:
 
 
 def _domain_signal_counts(title: str, bullets: list[str], prompt: str) -> dict[str, int]:
-    text = " ".join([title, *bullets, prompt]).lower()
+    english_text = english_visual_search_phrase(title, *bullets, prompt, limit_words=18, max_length=180)
+    text = " ".join([title, *bullets, prompt, english_text]).lower()
     domain_rules = {
         "medical": ("disease", "drug", "dosage", "health", "medical", "patient", "population", "epidemic", "cells", "biology", "pharmacology", "laboratory"),
         "engineering": ("engineering", "bridge", "structural", "fluid", "design", "construction", "manufacturing", "mechanics"),
@@ -169,9 +184,31 @@ def _keyword_phrase(*parts: str, limit_words: int = 4, max_length: int = 36, exc
     return compact_search_query(" ".join(words), max_length=max_length) if words else ""
 
 
+def _english_keyword_phrase(*parts: str, limit_words: int = 5, max_length: int = 40, exclude: set[str] | None = None) -> str:
+    phrase = english_visual_search_phrase(*parts, limit_words=limit_words + 3, max_length=max_length + 24)
+    if not phrase:
+        return ""
+    exclude = {item.lower() for item in (exclude or set())}
+    words: list[str] = []
+    seen: set[str] = set()
+    for word in re.findall(r"[A-Za-z][A-Za-z0-9&'+-]*", phrase):
+        key = word.lower()
+        if key in exclude or key in seen:
+            continue
+        seen.add(key)
+        words.append(word)
+        if len(words) >= limit_words:
+            break
+    return compact_search_query(" ".join(words), max_length=max_length) if words else ""
+
+
 def _presentation_entity(presentation_title: str) -> str:
     candidates = _named_entity_candidates(presentation_title)
     return candidates[0] if candidates else ""
+
+
+def _english_entity_query(entity: str) -> str:
+    return english_visual_search_phrase(entity, limit_words=4, max_length=42) or entity
 
 
 def _slide_mentions_entity(entity: str, title: str, bullets: list[str]) -> bool:
@@ -189,25 +226,51 @@ def _research_prompt(slide: Any, presentation_title: str) -> str:
     title = (getattr(slide, "title", None) or "").strip()
     prompt = (getattr(slide, "image_prompt", None) or "").strip()
     bullets = [str(item).strip() for item in (getattr(slide, "bullets", None) or []) if str(item).strip()]
+    english_subject = english_visual_search_phrase(prompt, title, presentation_title, *bullets[:2], limit_words=8, max_length=72)
+    lower_subject = english_subject.lower()
+    lower_slide = " ".join([title, prompt, presentation_title, *bullets[:4]]).lower()
+    if "dna" in lower_subject:
+        if any(term in lower_subject for term in ("adenine", "thymine", "guanine", "cytosine", "hydrogen")):
+            return "DNA base pairs"
+        if "structure" in lower_subject or "double helix" in lower_subject:
+            return "DNA double helix"
+        return "DNA"
+    if "rna" in lower_subject:
+        if any(term in lower_slide for term in ("vaccine", "vaccines", "medicine", "therapy", "therapies", "therapeutic")):
+            return "mRNA vaccine"
+        if any(term in lower_slide for term in ("gene editing", "crispr")):
+            return "guide RNA CRISPR"
+        if any(term in lower_slide for term in ("rrna", "ribosomal", "ribosome", "protein assembly", "protein production")):
+            return "ribosome structure"
+        if any(term in lower_slide for term in ("trna", "transfer rna", "protein builder")):
+            return "transfer RNA ribosome"
+        if any(term in lower_slide for term in ("transcription", "rna polymerase")):
+            return "RNA transcription"
+        if any(term in lower_slide for term in ("mirna", "sirna", "microrna", "gene regulation", "regulatory")):
+            return "microRNA gene regulation"
+        return "RNA molecule"
+
     deck_entity = _presentation_entity(presentation_title)
     local_entity_candidates = _named_entity_candidates(" | ".join([title, *bullets[:2]]))
     entity = local_entity_candidates[0] if local_entity_candidates else (deck_entity if _slide_mentions_entity(deck_entity, title, bullets) else "")
 
     if entity:
         entity_tokens = {token.lower() for token in re.findall(r"[^\W\d_]+", entity, flags=re.UNICODE)}
-        qualifier = _keyword_phrase(title, *bullets[:2], limit_words=2, max_length=18, exclude=entity_tokens)
-        query = f"{entity} {qualifier}".strip() if qualifier else entity
+        english_entity = _english_entity_query(entity)
+        qualifier = _english_keyword_phrase(title, *bullets[:2], prompt, limit_words=2, max_length=20, exclude=entity_tokens)
+        query = f"{english_entity} {qualifier}".strip() if qualifier and qualifier.lower() not in english_entity.lower() else english_entity
         return compact_search_query(query, max_length=30)
 
     concept_terms = _domain_concept_terms(title, bullets, prompt)
-    keyword_subject = _keyword_phrase(title, *bullets[:2], limit_words=4, max_length=28)
+    keyword_subject = _english_keyword_phrase(prompt, title, *bullets[:3], limit_words=5, max_length=32)
     scene_hint = _photo_scene_hint(title, bullets, prompt)
     prompt_scene = compact_search_query(_extract_scene_from_image_prompt(prompt), max_length=24) if prompt else ""
     prompt_scene = prompt_scene if prompt_scene and prompt_scene.lower() not in {"classroom", "learning", "students"} else ""
 
-    for candidate in (keyword_subject, concept_terms, scene_hint, prompt_scene):
+    for candidate in (keyword_subject, prompt_scene, concept_terms, scene_hint):
         if candidate:
-            return compact_search_query(candidate, max_length=32)
+            english_candidate = _english_keyword_phrase(candidate, limit_words=5, max_length=32) or candidate
+            return compact_search_query(english_candidate, max_length=32)
     return ""
 
 
@@ -219,7 +282,7 @@ def _research_context(slide: Any, presentation_title: str) -> str:
     deck_entity = _presentation_entity(presentation_title)
     if _slide_mentions_entity(deck_entity, title, bullets):
         parts.append(deck_entity)
-    return " | ".join(part for part in parts if part)
+    return english_visual_search_phrase(*parts, presentation_title, limit_words=16, max_length=140)
 
 
 def _resolved_from_research_image(
@@ -284,11 +347,13 @@ async def _resolve_one_research_image(
     context_text = _research_context(slide, presentation_title)
     if not prompt:
         return
+    image_class = _research_image_class(slide, prompt, context_text)
     logger.info(
-        "Prepared research prompt. slide_title=%r context=%r prompt=%r image_prompt=%r context_ascii=%s prompt_ascii=%s",
+        "Prepared research prompt. slide_title=%r context=%r prompt=%r image_class=%s image_prompt=%r context_ascii=%s prompt_ascii=%s",
         getattr(slide, "title", None),
         context_text,
         prompt,
+        image_class,
         getattr(slide, "image_prompt", None),
         context_text.isascii() if context_text else True,
         prompt.isascii(),
@@ -301,8 +366,8 @@ async def _resolve_one_research_image(
                 context_text=context_text,
                 style=style,
                 preferred_orientation="landscape",
-                image_type="photo",
-                image_class=ImageClass.PHOTO.value,
+                image_type=image_class,
+                image_class=image_class,
                 max_candidates=1,
                 exclude_source_urls=sorted(used_source_urls),
                 exclude_hashes=sorted(used_hashes),

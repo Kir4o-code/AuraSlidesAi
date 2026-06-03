@@ -199,9 +199,8 @@ function LayoutElementRenderer({
             }}
           />
         ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-5 text-center text-sm leading-6" style={{ color: tokens.textColor }}>
+          <div className="flex h-full w-full items-center justify-center p-5 text-center text-sm leading-6" style={{ color: tokens.textColor }}>
             <FiImage className="h-8 w-8" style={{ color: tokens.accentColor }} aria-hidden="true" />
-            <span>{(content.prompt as string | undefined) ?? alt}</span>
           </div>
         )}
       </div>
@@ -307,15 +306,7 @@ function SlideImage({ slide, tokens, exportMode }: SlideRendererProps & { tokens
         background: `linear-gradient(180deg, ${tokens.surface}, ${tokens.backgroundAlt})`,
       }}
     >
-      <div className="space-y-3">
-        <FiImage className="mx-auto h-9 w-9" style={{ color: tokens.accentColor }} aria-hidden="true" />
-        <p className="text-xs font-semibold uppercase tracking-[0.22em]" style={{ color: tokens.accentColor }}>
-          Image prompt
-        </p>
-        <p className="text-base leading-7" style={{ color: tokens.textColor }}>
-          {slide.image_prompt ?? "No image prompt provided."}
-        </p>
-      </div>
+      <FiImage className="h-9 w-9" style={{ color: tokens.accentColor }} aria-hidden="true" />
     </div>
   );
 }

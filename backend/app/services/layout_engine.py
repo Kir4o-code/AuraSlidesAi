@@ -197,15 +197,9 @@ def _render_layout_element(slide, element: LayoutElement, theme: ThemeDefinition
                 str(element.content.get("fit") or image_style.get("fit") or "cover"),
             )
         else:
-            placeholder = slide.shapes.add_textbox(Inches(_px(left + inset)), Inches(_px(top + inset)), Inches(_px(max(1, width - (inset * 2)))), Inches(_px(max(1, height - (inset * 2)))))
-            frame = placeholder.text_frame
-            frame.word_wrap = True
-            frame.clear()
-            run = frame.paragraphs[0].add_run()
-            run.text = element.content.get("prompt") or element.text or "Image"
-            run.font.name = theme.tokens.fonts.body
-            run.font.size = Pt(max(10, (element.font_size or 18) * 0.7))
-            run.font.color.rgb = _rgb(theme.tokens.text_primary)
+            # Keep unresolved image frames visually empty; prompt text is only
+            # debugging metadata and should not appear as slide content.
+            pass
     elif element.kind != LayoutElementKind.BULLET_LIST:
         text_left = left
         text_width = width
