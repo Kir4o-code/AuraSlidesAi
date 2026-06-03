@@ -401,8 +401,3 @@ def select_image_source_with_reason(prompt: str, secondary_text: str | None = No
         search_query=concept_query,
         confidence=0.68,
     ), "fell back to generic concept search"
-
-
-def select_image_source(prompt: str, secondary_text: str | None = None) -> ImageSourceSelection:
-    selection, _ = select_image_source_with_reason(prompt, secondary_text)
-    return selection

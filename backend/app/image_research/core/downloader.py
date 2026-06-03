@@ -1,6 +1,5 @@
 import re
 import uuid
-from pathlib import Path
 
 import httpx
 from PIL import Image

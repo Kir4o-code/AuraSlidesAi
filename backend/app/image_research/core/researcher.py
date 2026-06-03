@@ -7,8 +7,6 @@ import re
 import time
 import uuid
 
-import httpx
-
 from app.image_research.config import PUBLIC_IMAGES_PREFIX, settings
 from app.image_research.core.clip_scorer import ClipScorer
 from app.image_research.core.downloader import DownloadError, download_image, track_remote_download
@@ -39,10 +37,6 @@ from app.image_research.schemas import (
 
 logger = logging.getLogger("image_researcher")
 STOCK_PROVIDER_NAMES = {"unsplash"}
-WIKIMEDIA_HEADERS = {
-    "User-Agent": "AuraSlidesAI/1.0 (https://example.com; contact@auraslidesai.local)",
-    "Accept": "application/json; charset=utf-8",
-}
 
 STRICT_RELEVANCE_GROUPS: tuple[tuple[set[str], set[str], set[str]], ...] = (
     (
@@ -344,165 +338,6 @@ class ImageResearcher:
 
         warnings.append("No suitable entity image found on Wikipedia or Wikimedia Commons.")
         return []
-
-    async def _expanded_queries(
-        self, plan: SearchPlan, request: ImageResearchRequest, warnings: list[str]
-    ) -> list[str]:
-        profile = get_class_profile(plan.image_class)
-        if plan.image_class == "photo":
-            queries = [
-                compact_search_query(plan.main_query, max_length=60),
-                compact_search_query(request.prompt, max_length=60),
-            ]
-            seen: set[str] = set()
-            out: list[str] = []
-            for query in queries:
-                key = query.lower()
-                if query and key not in seen:
-                    seen.add(key)
-                    out.append(query)
-            return out[:2]
-
-        # Class context expands generic slide prompts into provider-specific searches.
-        queries = [
-            compact_search_query(request.prompt),
-            compact_search_query(f"{request.prompt} {plan.image_class}"),
-            plan.main_query,
-        ]
-        class_queries = [f"{plan.main_query} {term}" for term in profile.query_terms]
-        synonym_queries = self._synonym_queries(plan.main_query, plan.image_class)
-        wiki_queries = await self._wikipedia_related_queries(plan.main_query, warnings)
-        queries.extend(await self._multilingual_wikipedia_queries(request.prompt, warnings))
-        queries.extend(class_queries)
-        queries.extend(synonym_queries)
-        queries.extend(wiki_queries)
-        queries.extend(plan.alternative_queries)
-
-        seen: set[str] = set()
-        out: list[str] = []
-        for query in queries:
-            clean = compact_search_query(query)
-            key = clean.lower()
-            if clean and key not in seen:
-                seen.add(key)
-                out.append(clean)
-        return out[:8]
-
-    async def _wikipedia_related_queries(self, query: str, warnings: list[str]) -> list[str]:
-        queries: list[str] = []
-        try:
-            async with httpx.AsyncClient(timeout=12) as client:
-                resp = await client.get(
-                    "https://en.wikipedia.org/w/api.php",
-                    params={
-                        "action": "opensearch",
-                        "format": "json",
-                        "search": query,
-                        "limit": 5,
-                        "namespace": 0,
-                    },
-                    headers=WIKIMEDIA_HEADERS,
-                )
-                resp.raise_for_status()
-                titles = [title for title in resp.json()[1] if isinstance(title, str)]
-                queries.extend(titles)
-                if titles:
-                    cat_resp = await client.get(
-                        "https://en.wikipedia.org/w/api.php",
-                        params={
-                            "action": "query",
-                            "format": "json",
-                            "titles": "|".join(titles[:3]),
-                            "prop": "categories|pageimages",
-                            "cllimit": 10,
-                            "piprop": "name|original",
-                        },
-                        headers=WIKIMEDIA_HEADERS,
-                    )
-                    cat_resp.raise_for_status()
-                    pages = (cat_resp.json().get("query") or {}).get("pages") or {}
-                    for page in pages.values():
-                        if page.get("title"):
-                            queries.append(str(page["title"]))
-                        for category in page.get("categories") or []:
-                            title = str(category.get("title", "")).replace("Category:", "")
-                            if not title.lower().startswith(("articles ", "cs1 ", "webarchive", "pages ")):
-                                queries.append(title)
-        except Exception as exc:
-            warnings.append(f"Wikipedia query expansion failed: {exc}")
-        return queries
-
-    def _synonym_queries(self, query: str, image_class: str) -> list[str]:
-        synonyms = {
-            "photo": ("photograph", "documentary image", "real image"),
-            "diagram": ("schema", "chart", "educational diagram", "labeled illustration"),
-            "illustration": ("drawing", "vector illustration", "educational drawing"),
-            "icon": ("symbol", "pictogram", "flat icon"),
-        }
-        return [f"{query} {term}" for term in synonyms.get(image_class, ())]
-
-    async def _multilingual_wikipedia_queries(self, prompt: str, warnings: list[str]) -> list[str]:
-        if prompt.isascii():
-            return []
-        stop_words = {
-            "\u0438",
-            "\u043d\u0430",
-            "\u0437\u0430",
-            "\u0441\u044a\u0441",
-            "\u0431\u0435\u0437",
-            "\u043a\u0430\u0442\u043e",
-            "\u043d\u0435\u0433\u043e",
-            "\u043d\u0435\u0433\u043e\u0432\u043e\u0442\u043e",
-            "\u043d\u0435\u0439\u043d\u043e\u0442\u043e",
-            "\u0431\u0438\u043e\u043b\u043e\u0433\u0438\u044f",
-            "\u0447\u043e\u0432\u0435\u0448\u043a\u043e\u0442\u043e",
-            "\u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e",
-        }
-        words = [
-            word
-            for word in re.findall(r"[^\W\d_]{3,}", prompt.lower(), flags=re.UNICODE)
-            if word not in stop_words
-        ]
-        searches = [prompt, *list(reversed(words[:5]))]
-        queries: list[str] = []
-        try:
-            async with httpx.AsyncClient(timeout=12) as client:
-                for search in searches:
-                    resp = await client.get(
-                        "https://bg.wikipedia.org/w/api.php",
-                        params={
-                            "action": "opensearch",
-                            "format": "json",
-                            "search": search,
-                            "limit": 3,
-                            "namespace": 0,
-                        },
-                        headers=WIKIMEDIA_HEADERS,
-                    )
-                    resp.raise_for_status()
-                    for title in resp.json()[1][:1]:
-                        if isinstance(title, str):
-                            queries.append(title)
-                            lang = await client.get(
-                                "https://bg.wikipedia.org/w/api.php",
-                                params={
-                                    "action": "query",
-                                    "format": "json",
-                                    "titles": title,
-                                    "prop": "langlinks",
-                                    "lllang": "en",
-                                },
-                                headers=WIKIMEDIA_HEADERS,
-                            )
-                            lang.raise_for_status()
-                            pages = (lang.json().get("query") or {}).get("pages") or {}
-                            for page in pages.values():
-                                for link in page.get("langlinks") or []:
-                                    if link.get("lang") == "en" and link.get("*"):
-                                        queries.append(link["*"])
-        except Exception as exc:
-            warnings.append(f"Multilingual query expansion failed: {exc}")
-        return queries
 
     def _dedupe(self, candidates: list[ImageCandidate]) -> list[ImageCandidate]:
         seen: set[str] = set()

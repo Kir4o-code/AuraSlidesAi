@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.schemas.presentation import Presentation, Slide, SlideType
+from app.schemas.presentation import Presentation, Slide
 from app.semantic.catalog import get_layout_spec
 from app.semantic.contracts import (
     LayoutSpec,

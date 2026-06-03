@@ -22,13 +22,6 @@ from app.services.image_optimizer import ImageOptimizationError, optimize_image_
 
 logger = logging.getLogger(__name__)
 _image_researcher: ImageResearcher | None = None
-QUERY_STOPWORDS = {
-    "a", "an", "and", "the", "for", "with", "from", "that", "this",
-    "на", "в", "във", "и", "за", "от", "до", "по", "под", "над", "към", "при", "през", "но", "или",
-    "г", "година", "години",
-    "тоталитарният", "тоталитарен", "режим", "режима", "животът", "живота", "живот", "епоха", "власт", "властта",
-    "кой", "как", "като", "една", "личността", "нацията",
-}
 
 
 class ImageResearchResolutionError(Exception):
@@ -166,22 +159,6 @@ def _domain_concept_terms(title: str, bullets: list[str], prompt: str) -> str:
         return " ".join(matched[:2]).strip()
 
     return ""
-
-
-def _keyword_phrase(*parts: str, limit_words: int = 4, max_length: int = 36, exclude: set[str] | None = None) -> str:
-    exclude = exclude or set()
-    words: list[str] = []
-    seen: set[str] = set()
-    text = " ".join(part for part in parts if part)
-    for word in re.findall(r"[^\W\d_]+", text, flags=re.UNICODE):
-        key = word.lower()
-        if len(word) < 3 or key in QUERY_STOPWORDS or key in exclude or key in seen:
-            continue
-        seen.add(key)
-        words.append(word)
-        if len(words) >= limit_words:
-            break
-    return compact_search_query(" ".join(words), max_length=max_length) if words else ""
 
 
 def _english_keyword_phrase(*parts: str, limit_words: int = 5, max_length: int = 40, exclude: set[str] | None = None) -> str:
@@ -446,24 +423,3 @@ async def enrich_presentation_images(
 
     logger.info("Image enrichment complete. resolved_images=%s", sum(1 for slide in image_slides if slide.resolved_image))
     return presentation
-
-
-def build_image_context(slide: Any) -> dict[str, Any] | None:
-    image_prompt = getattr(slide, "image_prompt", None)
-    if not image_prompt:
-        return None
-
-    resolved = getattr(slide, "resolved_image", None)
-    render_src = Path(resolved.local_path).resolve().as_uri() if resolved else None
-    return {
-        "query": image_prompt,
-        "role": getattr(slide, "type", "hero_image"),
-        "image_class": getattr(getattr(slide, "image_class", None), "value", getattr(slide, "image_class", None)),
-        "status": "resolved" if resolved else "missing",
-        "src": resolved.public_url if resolved else None,
-        "render_src": render_src,
-        "alt": image_prompt,
-        "source": resolved.source if resolved else None,
-        "license_name": resolved.license_name if resolved else None,
-        "warnings": [],
-    }

@@ -40,10 +40,6 @@ def prepare_export_bundle(presentation: Presentation) -> tuple[LayoutedPresentat
         validate_layout_spec(layout_spec)
 
     return layouted_document, semantic_theme
-
-from app.services.exporters import build_presentation_exports as run_exporters
-
-
 def _build_asset_id(title: str) -> str:
     words = re.findall(r"\w+", unicodedata.normalize("NFKD", title), flags=re.UNICODE)
     slug = "-".join(words).strip("-_").lower()[:64].strip("-_")
@@ -63,8 +59,3 @@ def build_presentation_exports(presentation: Presentation) -> tuple[str, str | N
         exporter_type=exporter_type,
         browser_fallback_presentation=presentation,
     )
-
-
-def build_pdf(presentation: Presentation) -> str | None:
-    _, pdf_name = build_presentation_exports(presentation)
-    return pdf_name

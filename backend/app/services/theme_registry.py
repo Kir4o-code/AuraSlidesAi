@@ -433,23 +433,3 @@ def resolve_theme_name(value: str | None) -> str:
 
 def get_theme_tokens(value: str | None) -> ThemeTokens:
     return THEME_REGISTRY[resolve_theme_name(value)]
-
-
-def list_theme_summaries() -> list[dict[str, object]]:
-    return [
-        {
-            "id": tokens.name,
-            "name": tokens.display_name,
-            "description": tokens.description,
-            "recommended_use_cases": list(tokens.recommended_use_cases),
-            "visual_tags": list(tokens.visual_tags),
-            "palette": list(tokens.palette),
-            "font_pairing": {
-                "heading": tokens.heading_font_family,
-                "body": tokens.body_font_family,
-            },
-            "image_style": tokens.image_style,
-            "supported_slide_layout_types": list(tokens.supported_slide_layout_types),
-        }
-        for tokens in THEME_REGISTRY.values()
-    ]

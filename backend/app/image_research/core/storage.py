@@ -29,14 +29,6 @@ def save_metadata(request_id: str, data: dict, prompt_slug: str | None = None) -
     return path
 
 
-def copy_best_image(temp_path: str, request_id: str, prompt_slug: str | None = None) -> Path:
-    ensure_output_dirs(prompt_slug)
-    base = IMAGES_DIR / prompt_slug if prompt_slug else IMAGES_DIR
-    dest = base / f"{request_id}_best.jpg"
-    shutil.copyfile(temp_path, dest)
-    return dest
-
-
 def copy_ranked_image(temp_path: str, request_id: str, rank: int, prompt_slug: str | None = None) -> Path:
     ensure_output_dirs(prompt_slug)
     base = IMAGES_DIR / prompt_slug if prompt_slug else IMAGES_DIR

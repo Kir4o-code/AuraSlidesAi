@@ -72,14 +72,6 @@ class ResolvedImageAsset(BaseModel):
     final_score: float | None = None
 
 
-class ImageSpec(BaseModel):
-    query: str = Field(min_length=3, max_length=240)
-    role: str = Field(default="hero_image", min_length=1, max_length=40)
-    remove_background: bool = False
-    resolved_image: ResolvedImageAsset | None = None
-    research_warnings: list[str] = Field(default_factory=list)
-
-
 class TimelineStep(BaseModel):
     label: str = Field(min_length=1, max_length=120)
     detail: str | None = Field(default=None, max_length=240)
@@ -97,14 +89,6 @@ class Slide(BaseModel):
     title: str | None = Field(default=None, max_length=140)
     subtitle: str | None = Field(default=None, max_length=220)
     bullets: list[str] = Field(default_factory=list, max_length=6)
-    # layout helpers
-    class TextAlign(str, Enum):
-        LEFT = "left"
-        CENTER = "center"
-        RIGHT = "right"
-
-    text_align: TextAlign = Field(default=TextAlign.LEFT)
-    columns: int = Field(default=1, ge=1, le=3)
     image_prompt: str | None = Field(default=None, max_length=500)
     image_class: ImageClass | None = None
     visual_mood: str | None = Field(default=None, max_length=120)

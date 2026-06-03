@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.image_research.core.image_classes import CLASS_KEYWORDS, ImageClass, infer_image_class
-from app.schemas.presentation import GuidedSlideIntent, PlanningMode, Presentation, Slide, SlideType, StatisticItem, ThemeName, TimelineStep
+from app.schemas.presentation import GuidedSlideIntent, PlanningMode, Presentation, Slide, SlideType, ThemeName
 from app.services.theme_registry import resolve_theme_name
 
 
@@ -394,25 +394,6 @@ def _simple_english_visual_subject(
 def _fallback_image_prompt(title: str | None, presentation_title: str, *, slide_type: str = "supporting") -> str:
     topic = english_visual_search_phrase(title, presentation_title, limit_words=6, max_length=60) or "presentation topic"
     return topic
-
-
-def _supporting_visual_context(
-    title: str | None,
-    subtitle: str | None,
-    bullets: list[str] | None,
-) -> str:
-    parts: list[str] = []
-    if title:
-        parts.append(title.strip())
-    if subtitle:
-        parts.append(subtitle.strip())
-    for bullet in (bullets or [])[:2]:
-        cleaned = bullet.strip()
-        if cleaned:
-            parts.append(cleaned)
-    if not parts:
-        return ""
-    return " | ".join(parts)[:220]
 
 
 def _normalize_image_prompt(
