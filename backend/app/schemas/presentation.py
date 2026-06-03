@@ -1,6 +1,6 @@
 from enum import Enum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.semantic.contracts import LayoutedPresentationDocument
 
@@ -48,7 +48,7 @@ class GuidedSlideIntent(BaseModel):
 
 class ImageSource(str, Enum):
     GEMINI = "gemini"
-    IMAGE_RESEARCH = "image_research"
+    UNSPLASH = "unsplash"
 
 
 class ImageClass(str, Enum):
@@ -169,6 +169,13 @@ class GeneratePresentationRequest(BaseModel):
     image_source: ImageSource = ImageSource.GEMINI
     planning_mode: PlanningMode = PlanningMode.AUTOMATIC
     slide_outline: list[GuidedSlideIntent] | None = Field(default=None, min_length=3, max_length=10)
+
+    @field_validator("image_source", mode="before")
+    @classmethod
+    def map_legacy_image_source(cls, value: object) -> object:
+        if value == "image_research":
+            return ImageSource.UNSPLASH
+        return value
 
     @model_validator(mode="after")
     def validate_guided_outline(self) -> "GeneratePresentationRequest":

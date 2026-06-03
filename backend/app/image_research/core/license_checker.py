@@ -1,6 +1,4 @@
 ALLOWED_LICENSES = {
-    "Pexels License",
-    "Pixabay Content License",
     "Unsplash License",
     "CC0",
     "Public Domain",

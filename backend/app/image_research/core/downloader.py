@@ -5,7 +5,7 @@ from pathlib import Path
 import httpx
 from PIL import Image
 
-from app.image_research.config import TEMP_DIR
+from app.image_research.config import TEMP_DIR, get_unsplash_access_key
 
 
 class DownloadError(Exception):
@@ -40,3 +40,15 @@ async def download_image(image_url: str, prefix: str) -> str:
         path.unlink(missing_ok=True)
         raise ValueError("Downloaded image is invalid") from exc
     return str(path)
+
+
+async def track_remote_download(download_tracking_url: str | None) -> None:
+    if not download_tracking_url:
+        return
+    headers = {"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"}
+    access_key = get_unsplash_access_key()
+    if "api.unsplash.com" in download_tracking_url and access_key:
+        headers["Accept-Version"] = "v1"
+        headers["Authorization"] = f"Client-ID {access_key}"
+    async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+        await client.get(download_tracking_url, headers=headers)

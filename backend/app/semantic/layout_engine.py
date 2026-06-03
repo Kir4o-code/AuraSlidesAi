@@ -20,8 +20,8 @@ CANVAS_HEIGHT = 720
 MARGIN_X = 80
 MARGIN_Y = 72
 GRID_GAP = 24
-TEXT_LINE_HEIGHT = 1.18
-PANEL_PADDING = 18
+TEXT_LINE_HEIGHT = 1.28
+PANEL_PADDING = 24
 
 
 def _scale_spacing(value: int | float, spacing_scale: float) -> int:
@@ -33,6 +33,13 @@ def _gap(base: int | float, spacing_scale: float, minimum: int | float | None = 
     if minimum is None:
         return scaled
     return max(int(round(minimum)), scaled)
+
+
+def _scale_type(value: int, typography_scale: float, minimum: int | None = None) -> int:
+    scaled = int(round(value * typography_scale))
+    if minimum is not None:
+        return max(minimum, scaled)
+    return scaled
 
 
 def _fit_font_size(base: int, text: str, minimum: int, maximum: int) -> int:
@@ -61,8 +68,8 @@ def _item_field(item, field_name: str, default=None):
 def _estimate_chars_per_line(width: int, font_size: int) -> int:
     if font_size <= 0:
         return 1
-    # 0.56 is a stable approximation for a mixed sans-serif deck font.
-    return max(12, int(width / max(font_size * 0.56, 1)))
+    # Be slightly conservative so exported text rows reserve enough height.
+    return max(10, int(width / max(font_size * 0.50, 1)))
 
 
 def _estimate_lines(text: str, width: int, font_size: int) -> int:
@@ -77,6 +84,26 @@ def _text_height(text: str, width: int, font_size: int, *, min_height: int = 0, 
     lines = _estimate_lines(text, width, font_size)
     estimated = int(math.ceil(lines * font_size * TEXT_LINE_HEIGHT)) + (padding_y * 2)
     return max(min_height, estimated), lines, _estimate_chars_per_line(width, font_size)
+
+
+def _fit_text_block(
+    text: str,
+    width: int,
+    font_size: int,
+    *,
+    min_font_size: int,
+    max_height: int | None = None,
+    min_height: int = 0,
+    padding_y: int = 0,
+) -> tuple[int, int]:
+    current = font_size
+    height, _, _ = _text_height(text, width, current, min_height=min_height, padding_y=padding_y)
+    while max_height is not None and current > min_font_size and height > max_height:
+        current -= 1
+        height, _, _ = _text_height(text, width, current, min_height=min_height, padding_y=padding_y)
+    if max_height is not None:
+        height = min(height, max_height)
+    return current, height
 
 
 def _make_debug(text: str, width: int, font_size: int, spacing_before: int = 0, spacing_after: int = 0, note: str | None = None) -> LayoutDebugInfo:
@@ -107,8 +134,21 @@ def _text_element(
     kind: LayoutElementKind = LayoutElementKind.TEXT,
     content: dict | None = None,
     note: str | None = None,
+    max_height: int | None = None,
+    min_font_size: int | None = None,
 ) -> LayoutElement:
-    height, _, _ = _text_height(text, width, font_size, min_height=min_height)
+    resolved_font_size = font_size
+    if min_font_size is not None and max_height is not None:
+        resolved_font_size, height = _fit_text_block(
+            text,
+            width,
+            font_size,
+            min_font_size=min_font_size,
+            max_height=max_height,
+            min_height=min_height,
+        )
+    else:
+        height, _, _ = _text_height(text, width, font_size, min_height=min_height)
     return LayoutElement(
         id=element_id,
         kind=kind,
@@ -119,11 +159,11 @@ def _text_element(
         height=height,
         align=align,
         wrap=True,
-        font_size=font_size,
+        font_size=resolved_font_size,
         line_height=TEXT_LINE_HEIGHT,
         text=text,
         content=content or {},
-        debug=_make_debug(text, width, font_size, spacing_before, spacing_after, note),
+        debug=_make_debug(text, width, resolved_font_size, spacing_before, spacing_after, note),
     )
 
 
@@ -170,8 +210,13 @@ def _bullet_list_element(
     max_height: int | None = None,
     icon_context: str = "",
 ) -> LayoutElement:
+    text_width = max(1, width - 64)
+    row_padding = 24
+    row_min_height = 56
+    row_gap = 16
+
     def list_height(size: int) -> int:
-        return sum(max(_text_height(bullet, width - 58, size)[0] + 14, 40) + 12 for bullet in bullets)
+        return sum(max(_text_height(bullet, text_width, size)[0] + row_padding, row_min_height) + row_gap for bullet in bullets)
 
     while font_size > 15 and max_height is not None and list_height(font_size) > max_height:
         font_size -= 1
@@ -179,8 +224,8 @@ def _bullet_list_element(
     child_y = y
     children: list[LayoutElement] = []
     for index, bullet in enumerate(bullets):
-        item_height, _, _ = _text_height(bullet, width - 58, font_size)
-        item_height = max(item_height + 14, 40)
+        item_height, _, _ = _text_height(bullet, text_width, font_size)
+        item_height = max(item_height + row_padding, row_min_height)
         children.append(
             LayoutElement(
                 id=f"{element_id}_item_{index + 1}",
@@ -196,10 +241,10 @@ def _bullet_list_element(
                 line_height=TEXT_LINE_HEIGHT,
                 text=bullet,
                 content={"bullet": True, "index": index, "icon": choose_semantic_icon(f"{icon_context} {bullet}", role=region, index=index)},
-                debug=_make_debug(bullet, width - 58, font_size, 0, 0, "bullet item"),
+                debug=_make_debug(bullet, text_width, font_size, 0, 0, "bullet item"),
             )
         )
-        child_y += item_height + 12
+        child_y += item_height + row_gap
 
     total_height = max(1, child_y - y)
     return LayoutElement(
@@ -218,8 +263,8 @@ def _bullet_list_element(
         children=children,
         debug=LayoutDebugInfo(
             content_length=sum(len(item) for item in bullets),
-            estimated_lines=sum(max(1, _estimate_lines(item, width - 58, font_size)) for item in bullets),
-            estimated_chars_per_line=_estimate_chars_per_line(width - 58, font_size),
+            estimated_lines=sum(max(1, _estimate_lines(item, text_width, font_size)) for item in bullets),
+            estimated_chars_per_line=_estimate_chars_per_line(text_width, font_size),
             spacing_before=0,
             spacing_after=0,
             note="bullet list",
@@ -282,11 +327,11 @@ def _panel_element(
     )
 
 
-def _layout_title_slide(slide, spacing_scale: float) -> list[LayoutElement]:
+def _layout_title_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
     width = _available_width()
-    title_font = 66
-    subtitle_font = 26
-    notes_font = 18
+    title_font = _scale_type(70, typography_scale, 66)
+    subtitle_font = _scale_type(28, typography_scale, 24)
+    notes_font = _scale_type(19, typography_scale, 16)
     y = 138
     elements: list[LayoutElement] = []
 
@@ -313,11 +358,39 @@ def _layout_title_slide(slide, spacing_scale: float) -> list[LayoutElement]:
     return elements
 
 
-def _layout_bullets_slide(slide, spacing_scale: float) -> list[LayoutElement]:
+def _layout_title_left_feature_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
     width = _available_width()
-    title_font = _fit_font_size(42, slide.title or "", 30, 42)
-    bullet_font = 22
-    notes_font = 16
+    title_font = _scale_type(66, typography_scale, 62)
+    subtitle_font = _scale_type(26, typography_scale, 22)
+    notes_font = _scale_type(18, typography_scale, 16)
+    y = 128
+    elements: list[LayoutElement] = []
+
+    if slide.title:
+        title_width = min(760, width)
+        title_height, _, _ = _text_height(slide.title, title_width, title_font, min_height=96)
+        elements.append(_text_element(element_id=f"{slide.id}_title", region="title", x=MARGIN_X, y=y, width=title_width, text=slide.title, font_size=title_font, align=Alignment.START, min_height=title_height, note="title"))
+        y += title_height + _gap(24, spacing_scale, 18)
+
+    if slide.subtitle:
+        subtitle_width = min(640, width)
+        subtitle_height, _, _ = _text_height(slide.subtitle, subtitle_width, subtitle_font, min_height=42)
+        elements.append(_text_element(element_id=f"{slide.id}_subtitle", region="subtitle", x=MARGIN_X, y=y, width=subtitle_width, text=slide.subtitle, font_size=subtitle_font, align=Alignment.START, min_height=subtitle_height, note="subtitle"))
+        y += subtitle_height + _gap(18, spacing_scale, 14)
+
+    if slide.notes:
+        notes_width = min(620, width)
+        notes_height, _, _ = _text_height(slide.notes, notes_width, notes_font, min_height=26)
+        elements.append(_text_element(element_id=f"{slide.id}_notes", region="notes", x=MARGIN_X, y=max(y, 560), width=notes_width, text=slide.notes, font_size=notes_font, align=Alignment.START, min_height=notes_height, note="notes"))
+
+    return elements
+
+
+def _layout_bullets_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    width = _available_width()
+    title_font = _scale_type(_fit_font_size(46, slide.title or "", 34, 46), typography_scale, 32)
+    bullet_font = _scale_type(24, typography_scale, 20)
+    notes_font = _scale_type(17, typography_scale, 15)
     elements: list[LayoutElement] = []
     y = 86
 
@@ -328,7 +401,7 @@ def _layout_bullets_slide(slide, spacing_scale: float) -> list[LayoutElement]:
         y += title_height + title_gap
 
     bullets = slide.bullets or []
-    body_y = max(y, 224)
+    body_y = max(y + _gap(12, spacing_scale, 8), 224)
     bullet_list = _bullet_list_element(element_id=f"{slide.id}_bullets", region="body", x=MARGIN_X, y=body_y, width=width, bullets=bullets, font_size=bullet_font, max_height=CANVAS_HEIGHT - body_y - 54, icon_context=f"{slide.title or ''} {getattr(slide, 'icon_intent', '') or ''}")
     elements.append(bullet_list)
     y = body_y + bullet_list.height + _gap(22, spacing_scale, 16)
@@ -340,15 +413,48 @@ def _layout_bullets_slide(slide, spacing_scale: float) -> list[LayoutElement]:
     return elements
 
 
-def _layout_image_bullets_slide(slide, spacing_scale: float) -> list[LayoutElement]:
+def _layout_bullets_dense_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    width = _available_width()
+    title_font = _scale_type(_fit_font_size(40, slide.title or "", 28, 40), typography_scale, 28)
+    bullet_font = _scale_type(20, typography_scale, 17)
+    notes_font = _scale_type(16, typography_scale, 14)
+    elements: list[LayoutElement] = []
+    y = 82
+
+    if slide.title:
+        title_height, _, _ = _text_height(slide.title, width, title_font, min_height=58, padding_y=4)
+        elements.append(_text_element(element_id=f"{slide.id}_title", region="title", x=MARGIN_X, y=y, width=width, text=slide.title, font_size=title_font, align=Alignment.START, min_height=title_height, note="dense title"))
+        y += title_height + _gap(20, spacing_scale, 14)
+
+    bullet_list = _bullet_list_element(
+        element_id=f"{slide.id}_bullets",
+        region="body",
+        x=MARGIN_X,
+        y=y,
+        width=width,
+        bullets=slide.bullets or [],
+        font_size=bullet_font,
+        max_height=CANVAS_HEIGHT - y - 80,
+        icon_context=f"{slide.title or ''} {getattr(slide, 'icon_intent', '') or ''}",
+    )
+    elements.append(bullet_list)
+    y += bullet_list.height + _gap(14, spacing_scale, 10)
+
+    if slide.notes:
+        notes_height, _, _ = _text_height(slide.notes, width, notes_font, min_height=24)
+        elements.append(_text_element(element_id=f"{slide.id}_notes", region="notes", x=MARGIN_X, y=max(y, 614), width=width, text=slide.notes, font_size=notes_font, align=Alignment.START, min_height=notes_height, note="dense notes"))
+    return elements
+
+
+def _layout_image_bullets_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
     elements: list[LayoutElement] = []
     left_x = 88
     left_width = 560
     right_x = 708
     right_width = 484
-    title_font = _fit_font_size(38, slide.title or "", 28, 38)
-    bullet_font = 20
-    notes_font = 16
+    title_font = _scale_type(_fit_font_size(40, slide.title or "", 28, 40), typography_scale, 27)
+    bullet_font = _scale_type(21, typography_scale, 18)
+    notes_font = _scale_type(17, typography_scale, 15)
     title_y = 90
     inner_width = left_width - (PANEL_PADDING * 2)
     inner_height = 548 - (PANEL_PADDING * 2)
@@ -356,18 +462,18 @@ def _layout_image_bullets_slide(slide, spacing_scale: float) -> list[LayoutEleme
     left_children: list[LayoutElement] = []
     if slide.title:
         title_height, _, _ = _text_height(slide.title, inner_width, title_font, min_height=68, padding_y=4)
-        title_gap = _gap(24, spacing_scale, 16)
+        title_gap = _gap(30, spacing_scale, 22)
         left_children.append(_text_element(element_id=f"{slide.id}_title", region="title", x=0, y=0, width=inner_width, text=slide.title, font_size=title_font, align=Alignment.START, min_height=title_height, spacing_after=title_gap, note="title"))
         offset_y = title_height + title_gap
     else:
         offset_y = 0
 
-    bullet_y = max(offset_y, 112)
+    bullet_y = max(offset_y + _gap(12, spacing_scale, 8), 132)
     notes_height = _text_height(slide.notes or "", inner_width, notes_font, min_height=26)[0] if slide.notes else 0
     notes_reserve = notes_height + _gap(18, spacing_scale, 12) if slide.notes else 0
     bullet_list = _bullet_list_element(element_id=f"{slide.id}_bullets", region="body", x=0, y=bullet_y, width=inner_width, bullets=slide.bullets or [], font_size=bullet_font, max_height=max(120, inner_height - bullet_y - notes_reserve), icon_context=f"{slide.title or ''} {getattr(slide, 'icon_intent', '') or ''}")
     left_children.append(bullet_list)
-    offset_y = bullet_y + bullet_list.height + _gap(18, spacing_scale, 12)
+    offset_y = bullet_y + bullet_list.height + _gap(24, spacing_scale, 16)
 
     if slide.notes:
         left_children.append(_text_element(element_id=f"{slide.id}_notes", region="notes", x=0, y=offset_y, width=inner_width, text=slide.notes, font_size=notes_font, align=Alignment.START, min_height=notes_height, note="notes"))
@@ -404,15 +510,81 @@ def _layout_image_bullets_slide(slide, spacing_scale: float) -> list[LayoutEleme
     return elements
 
 
-def _layout_hero_image_slide(slide, spacing_scale: float) -> list[LayoutElement]:
+def _layout_image_focus_split_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    elements: list[LayoutElement] = []
+    left_x = 88
+    left_width = 430
+    right_x = 548
+    right_width = 648
+    title_font = _scale_type(_fit_font_size(36, slide.title or "", 26, 36), typography_scale, 25)
+    bullet_font = _scale_type(21, typography_scale, 18)
+    notes_font = _scale_type(16, typography_scale, 14)
+    panel_y = 92
+    inner_width = left_width - (PANEL_PADDING * 2)
+
+    left_children: list[LayoutElement] = []
+    y = 0
+    if slide.title:
+        title_height, _, _ = _text_height(slide.title, inner_width, title_font, min_height=54)
+        left_children.append(_text_element(element_id=f"{slide.id}_title", region="title", x=0, y=y, width=inner_width, text=slide.title, font_size=title_font, align=Alignment.START, min_height=title_height, note="title"))
+        y += title_height + _gap(26, spacing_scale, 18)
+    if slide.bullets:
+        bullets = _bullet_list_element(
+            element_id=f"{slide.id}_bullets",
+            region="body",
+            x=0,
+            y=y,
+            width=inner_width,
+            bullets=slide.bullets or [],
+            font_size=bullet_font,
+            max_height=290,
+            icon_context=f"{slide.title or ''} {getattr(slide, 'icon_intent', '') or ''}",
+        )
+        left_children.append(bullets)
+        y += bullets.height + _gap(16, spacing_scale, 10)
+    if slide.notes:
+        notes_height, _, _ = _text_height(slide.notes, inner_width, notes_font, min_height=24)
+        left_children.append(_text_element(element_id=f"{slide.id}_notes", region="notes", x=0, y=y, width=inner_width, text=slide.notes, font_size=notes_font, align=Alignment.START, min_height=notes_height, note="notes"))
+
+    left_height = max(500, _content_bottom(left_children) + (PANEL_PADDING * 2))
+    elements.append(_panel_element(element_id=f"{slide.id}_left", region="body", x=left_x, y=panel_y, width=left_width, height=left_height, children=left_children, note="image focus left column"))
+
+    media = _slide_media(slide)
+    image_children = [
+        LayoutElement(
+            id=f"{slide.id}_image",
+            kind=LayoutElementKind.IMAGE,
+            region="media",
+            x=0,
+            y=0,
+            width=right_width - (PANEL_PADDING * 2),
+            height=536 - (PANEL_PADDING * 2),
+            align=Alignment.CENTER,
+            wrap=False,
+            content=_image_content(slide, media),
+            debug=LayoutDebugInfo(
+                content_length=len(slide.image_prompt or ""),
+                estimated_lines=0,
+                estimated_chars_per_line=0,
+                spacing_before=0,
+                spacing_after=0,
+                note="image focus panel",
+            ),
+        )
+    ]
+    elements.append(_panel_element(element_id=f"{slide.id}_image_panel", region="media", x=right_x, y=112, width=right_width, height=536, children=image_children, note="image-focused panel"))
+    return elements
+
+
+def _layout_hero_image_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
     elements: list[LayoutElement] = []
     left_x = 88
     left_width = 468
     right_x = 616
     right_width = 580
-    title_font = 40
-    subtitle_font = 22
-    notes_font = 16
+    title_font = _scale_type(44, typography_scale, 38)
+    subtitle_font = _scale_type(24, typography_scale, 20)
+    notes_font = _scale_type(17, typography_scale, 15)
 
     left_children: list[LayoutElement] = []
     y = 168
@@ -459,11 +631,11 @@ def _layout_hero_image_slide(slide, spacing_scale: float) -> list[LayoutElement]
     return elements
 
 
-def _layout_comparison_slide(slide, spacing_scale: float) -> list[LayoutElement]:
+def _layout_comparison_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
     elements: list[LayoutElement] = []
     width = _available_width()
-    title_font = 36
-    notes_font = 16
+    title_font = _scale_type(40, typography_scale, 34)
+    notes_font = _scale_type(17, typography_scale, 15)
     title_y = 84
 
     if slide.title:
@@ -482,13 +654,13 @@ def _layout_comparison_slide(slide, spacing_scale: float) -> list[LayoutElement]
     panel_y = max(title_y + 8, 196)
 
     def panel(side: str, x: int, heading: str | None, bullets: list[str]) -> LayoutElement:
-        heading_font = 16
-        bullet_font = 18
+        heading_font = _scale_type(17, typography_scale, 15)
+        bullet_font = _scale_type(19, typography_scale, 16)
         child_y = 0
         children: list[LayoutElement] = []
         if heading:
             heading_height, _, _ = _text_height(heading, panel_width - 40, heading_font, min_height=28)
-            children.append(_text_element(element_id=f"{slide.id}_{side}_heading", region=f"{side}.heading", x=0, y=0, width=panel_width - 40, text=heading, font_size=heading_font, align=Alignment.START, min_height=heading_height, note=f"{side} heading"))
+            children.append(_text_element(element_id=f"{slide.id}_{side}_heading", region=f"{side}.heading", x=0, y=0, width=panel_width - 40, text=heading, font_size=heading_font, align=Alignment.START, min_height=heading_height, max_height=52, min_font_size=14, note=f"{side} heading"))
             child_y += heading_height + _gap(14, spacing_scale, 10)
         bullet_list = _bullet_list_element(element_id=f"{slide.id}_{side}_bullets", region=f"{side}.body", x=0, y=child_y, width=panel_width - 40, bullets=bullets, font_size=bullet_font, max_height=250, icon_context=f"{slide.title or ''} {heading or ''}")
         children.append(bullet_list)
@@ -500,10 +672,10 @@ def _layout_comparison_slide(slide, spacing_scale: float) -> list[LayoutElement]
     return elements
 
 
-def _layout_timeline_slide(slide, spacing_scale: float) -> list[LayoutElement]:
+def _layout_timeline_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
     elements: list[LayoutElement] = []
     width = _available_width()
-    title_font = 36
+    title_font = _scale_type(40, typography_scale, 34)
     title_y = 84
 
     if slide.title:
@@ -517,17 +689,17 @@ def _layout_timeline_slide(slide, spacing_scale: float) -> list[LayoutElement]:
     row_width = width
     for index, step in enumerate(slide.timeline or []):
         row_children: list[LayoutElement] = []
-        label_font = 16
-        detail_font = 16
+        label_font = _scale_type(17, typography_scale, 14)
+        detail_font = _scale_type(17, typography_scale, 14)
         step_label = _item_field(step, "label", "")
         step_detail = _item_field(step, "detail")
         label_h, _, _ = _text_height(step_label, label_width, label_font, min_height=24)
         detail_w = row_width - label_width - 28
         detail_h, _, _ = _text_height(step_detail or "", detail_w, detail_font, min_height=24)
-        row_h = max(label_h, detail_h) + _gap(28, spacing_scale, 20)
-        row_children.append(_text_element(element_id=f"{slide.id}_step_{index + 1}_label", region=f"timeline.{index + 1}.label", x=0, y=0, width=label_width, text=step_label, font_size=label_font, align=Alignment.START, min_height=label_h, note="timeline label"))
+        row_h = max(label_h, detail_h) + _gap(40, spacing_scale, 28)
+        row_children.append(_text_element(element_id=f"{slide.id}_step_{index + 1}_label", region=f"timeline.{index + 1}.label", x=0, y=0, width=label_width, text=step_label, font_size=label_font, align=Alignment.START, min_height=label_h, max_height=row_h - 20, min_font_size=13, note="timeline label"))
         if step_detail:
-            row_children.append(_text_element(element_id=f"{slide.id}_step_{index + 1}_detail", region=f"timeline.{index + 1}.detail", x=label_width + _gap(28, spacing_scale, 18), y=0, width=detail_w, text=step_detail, font_size=detail_font, align=Alignment.START, min_height=detail_h, note="timeline detail"))
+            row_children.append(_text_element(element_id=f"{slide.id}_step_{index + 1}_detail", region=f"timeline.{index + 1}.detail", x=label_width + _gap(28, spacing_scale, 18), y=0, width=detail_w, text=step_detail, font_size=detail_font, align=Alignment.START, min_height=detail_h, max_height=row_h - 20, min_font_size=13, note="timeline detail"))
         rows.append(_panel_element(element_id=f"{slide.id}_step_{index + 1}", region="timeline", x=MARGIN_X, y=y, width=row_width, height=row_h, children=row_children, note="timeline step"))
         y += row_h + _gap(16, spacing_scale, 12)
 
@@ -535,10 +707,10 @@ def _layout_timeline_slide(slide, spacing_scale: float) -> list[LayoutElement]:
     return elements
 
 
-def _layout_statistics_slide(slide, spacing_scale: float) -> list[LayoutElement]:
+def _layout_statistics_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
     elements: list[LayoutElement] = []
     width = _available_width()
-    title_font = 36
+    title_font = _scale_type(40, typography_scale, 34)
     title_y = 84
 
     if slide.title:
@@ -558,34 +730,91 @@ def _layout_statistics_slide(slide, spacing_scale: float) -> list[LayoutElement]
         row = index // columns
         x = x0 + (col * (card_width + grid_gap))
         y = y0 + (row * (card_height + grid_gap))
-        value_font = 34
-        label_font = 15
-        detail_font = 14
+        value_font = _scale_type(36, typography_scale, 28)
+        label_font = _scale_type(16, typography_scale, 13)
+        detail_font = _scale_type(15, typography_scale, 12)
         child_elements: list[LayoutElement] = []
         stat_value = _item_field(stat, "value", "")
         stat_label = _item_field(stat, "label", "")
         stat_detail = _item_field(stat, "detail")
         value_h, _, _ = _text_height(stat_value, card_width - 40, value_font, min_height=44)
         label_h, _, _ = _text_height(stat_label, card_width - 40, label_font, min_height=24)
-        child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 1}_value", region=f"stat.{index + 1}.value", x=0, y=0, width=card_width - 40, text=stat_value, font_size=value_font, align=Alignment.CENTER, min_height=value_h, note="stat value"))
+        child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 1}_value", region=f"stat.{index + 1}.value", x=0, y=0, width=card_width - 40, text=stat_value, font_size=value_font, align=Alignment.CENTER, min_height=value_h, max_height=58, min_font_size=24, note="stat value"))
         label_gap = _gap(10, spacing_scale, 8)
-        child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 1}_label", region=f"stat.{index + 1}.label", x=0, y=value_h + label_gap, width=card_width - 40, text=stat_label, font_size=label_font, align=Alignment.CENTER, min_height=label_h, note="stat label"))
+        child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 1}_label", region=f"stat.{index + 1}.label", x=0, y=value_h + label_gap, width=card_width - 40, text=stat_label, font_size=label_font, align=Alignment.CENTER, min_height=label_h, max_height=42, min_font_size=12, note="stat label"))
         if stat_detail:
             detail_y = value_h + label_h + _gap(20, spacing_scale, 14)
             detail_h, _, _ = _text_height(stat_detail, card_width - 40, detail_font, min_height=22)
-            child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 1}_detail", region=f"stat.{index + 1}.detail", x=0, y=detail_y, width=card_width - 40, text=stat_detail, font_size=detail_font, align=Alignment.CENTER, min_height=detail_h, note="stat detail"))
+            child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 1}_detail", region=f"stat.{index + 1}.detail", x=0, y=detail_y, width=card_width - 40, text=stat_detail, font_size=detail_font, align=Alignment.CENTER, min_height=detail_h, max_height=56, min_font_size=11, note="stat detail"))
         elements.append(_panel_element(element_id=f"{slide.id}_stat_{index + 1}", region="statistics", x=x, y=y, width=card_width, height=card_height, children=child_elements, note="stat card"))
     return elements
 
 
-def _layout_quote_slide(slide, spacing_scale: float) -> list[LayoutElement]:
+def _layout_statistics_featured_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    elements: list[LayoutElement] = []
+    width = _available_width()
+    title_font = _scale_type(38, typography_scale, 32)
+    title_y = 84
+
+    if slide.title:
+        title_height, _, _ = _text_height(slide.title, width, title_font, min_height=52)
+        elements.append(_text_element(element_id=f"{slide.id}_title", region="title", x=MARGIN_X, y=title_y, width=width, text=slide.title, font_size=title_font, align=Alignment.START, min_height=title_height, note="featured statistics title"))
+        title_y += title_height + _gap(22, spacing_scale, 16)
+
+    cards = slide.statistics or []
+    if not cards:
+        return elements
+
+    hero = cards[0]
+    hero_width = 420
+    hero_height = 360
+    hero_children: list[LayoutElement] = []
+    hero_value = _item_field(hero, "value", "")
+    hero_label = _item_field(hero, "label", "")
+    hero_detail = _item_field(hero, "detail")
+    hero_value_font = _scale_type(58, typography_scale, 42)
+    hero_label_font = _scale_type(19, typography_scale, 14)
+    hero_detail_font = _scale_type(16, typography_scale, 13)
+    value_h, _, _ = _text_height(hero_value, hero_width - 40, hero_value_font, min_height=70)
+    label_h, _, _ = _text_height(hero_label, hero_width - 40, hero_label_font, min_height=26)
+    hero_children.append(_text_element(element_id=f"{slide.id}_hero_stat_value", region="hero_metric.value", x=0, y=0, width=hero_width - 40, text=hero_value, font_size=hero_value_font, align=Alignment.START, min_height=value_h, max_height=90, min_font_size=34, note="hero stat value"))
+    hero_children.append(_text_element(element_id=f"{slide.id}_hero_stat_label", region="hero_metric.label", x=0, y=value_h + 18, width=hero_width - 40, text=hero_label, font_size=hero_label_font, align=Alignment.START, min_height=label_h, max_height=54, min_font_size=13, note="hero stat label"))
+    if hero_detail:
+        detail_h, _, _ = _text_height(hero_detail, hero_width - 40, hero_detail_font, min_height=24)
+        hero_children.append(_text_element(element_id=f"{slide.id}_hero_stat_detail", region="hero_metric.detail", x=0, y=value_h + label_h + 42, width=hero_width - 40, text=hero_detail, font_size=hero_detail_font, align=Alignment.START, min_height=detail_h, max_height=112, min_font_size=12, note="hero stat detail"))
+    elements.append(_panel_element(element_id=f"{slide.id}_hero_stat", region="hero_metric", x=MARGIN_X, y=max(title_y, 176), width=hero_width, height=hero_height, children=hero_children, note="featured statistic"))
+
+    secondary = cards[1:]
+    grid_x = MARGIN_X + hero_width + 28
+    grid_width = CANVAS_WIDTH - grid_x - MARGIN_X
+    card_width = int((grid_width - 24) / 2)
+    card_height = 164
+    for index, stat in enumerate(secondary[:4]):
+        col = index % 2
+        row = index // 2
+        x = grid_x + col * (card_width + 24)
+        y = max(title_y, 176) + row * (card_height + 24)
+        value = _item_field(stat, "value", "")
+        label = _item_field(stat, "label", "")
+        detail = _item_field(stat, "detail")
+        child_elements = [
+            _text_element(element_id=f"{slide.id}_stat_{index + 2}_value", region=f"stat.{index + 2}.value", x=0, y=0, width=card_width - 40, text=value, font_size=_scale_type(32, typography_scale, 24), align=Alignment.START, min_height=40, max_height=46, min_font_size=20, note="stat value"),
+            _text_element(element_id=f"{slide.id}_stat_{index + 2}_label", region=f"stat.{index + 2}.label", x=0, y=58, width=card_width - 40, text=label, font_size=_scale_type(16, typography_scale, 13), align=Alignment.START, min_height=24, max_height=40, min_font_size=12, note="stat label"),
+        ]
+        if detail:
+            child_elements.append(_text_element(element_id=f"{slide.id}_stat_{index + 2}_detail", region=f"stat.{index + 2}.detail", x=0, y=96, width=card_width - 40, text=detail, font_size=_scale_type(14, typography_scale, 12), align=Alignment.START, min_height=22, max_height=44, min_font_size=11, note="stat detail"))
+        elements.append(_panel_element(element_id=f"{slide.id}_stat_{index + 2}", region="metrics", x=x, y=y, width=card_width, height=card_height, children=child_elements, note="secondary statistic"))
+    return elements
+
+
+def _layout_quote_slide(slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
     elements: list[LayoutElement] = []
     quote_width = 960
     quote_x = (CANVAS_WIDTH - quote_width) // 2
     quote_y = 220
-    quote_font = 42
-    attr_font = 20
-    notes_font = 16
+    quote_font = _scale_type(46, typography_scale, 38)
+    attr_font = _scale_type(22, typography_scale, 18)
+    notes_font = _scale_type(17, typography_scale, 15)
 
     if slide.quote:
         quote_h, _, _ = _text_height(slide.quote, quote_width, quote_font, min_height=100)
@@ -606,26 +835,34 @@ def _layout_quote_slide(slide, spacing_scale: float) -> list[LayoutElement]:
         elements.append(_text_element(element_id=f"{slide.id}_notes", region="notes", x=notes_x, y=max(quote_y, 540), width=notes_width, text=slide.notes, font_size=notes_font, align=Alignment.CENTER, min_height=notes_h, note="notes"))
     return elements
 
-def _layout_slide(slide, debug_mode: bool, spacing_scale: float) -> LayoutedSlide:
+def _layout_slide(slide, debug_mode: bool, spacing_scale: float, typography_scale: float) -> LayoutedSlide:
     layout_name = slide.layout_name
     if layout_name == "title.centered":
-        elements = _layout_title_slide(slide, spacing_scale)
+        elements = _layout_title_slide(slide, spacing_scale, typography_scale)
+    elif layout_name == "title.left_feature":
+        elements = _layout_title_left_feature_slide(slide, spacing_scale, typography_scale)
     elif layout_name == "content.bullets":
-        elements = _layout_bullets_slide(slide, spacing_scale)
+        elements = _layout_bullets_slide(slide, spacing_scale, typography_scale)
+    elif layout_name == "content.bullets_dense":
+        elements = _layout_bullets_dense_slide(slide, spacing_scale, typography_scale)
     elif layout_name == "content.image_split":
-        elements = _layout_image_bullets_slide(slide, spacing_scale)
+        elements = _layout_image_bullets_slide(slide, spacing_scale, typography_scale)
+    elif layout_name == "content.image_focus_split":
+        elements = _layout_image_focus_split_slide(slide, spacing_scale, typography_scale)
     elif layout_name == "hero.focus":
-        elements = _layout_hero_image_slide(slide, spacing_scale)
+        elements = _layout_hero_image_slide(slide, spacing_scale, typography_scale)
     elif layout_name == "comparison.split":
-        elements = _layout_comparison_slide(slide, spacing_scale)
+        elements = _layout_comparison_slide(slide, spacing_scale, typography_scale)
     elif layout_name == "timeline.stacked":
-        elements = _layout_timeline_slide(slide, spacing_scale)
+        elements = _layout_timeline_slide(slide, spacing_scale, typography_scale)
     elif layout_name == "statistics.grid":
-        elements = _layout_statistics_slide(slide, spacing_scale)
+        elements = _layout_statistics_slide(slide, spacing_scale, typography_scale)
+    elif layout_name == "statistics.featured":
+        elements = _layout_statistics_featured_slide(slide, spacing_scale, typography_scale)
     elif layout_name == "quote.centered":
-        elements = _layout_quote_slide(slide, spacing_scale)
+        elements = _layout_quote_slide(slide, spacing_scale, typography_scale)
     else:
-        elements = _layout_bullets_slide(slide, spacing_scale)
+        elements = _layout_bullets_slide(slide, spacing_scale, typography_scale)
 
     return LayoutedSlide(
         slide_id=slide.id,
@@ -641,10 +878,10 @@ def _layout_slide(slide, debug_mode: bool, spacing_scale: float) -> LayoutedSlid
     )
 
 
-def build_layouted_presentation(document: PresentationDocument, *, debug_mode: bool = False, spacing_scale: float = 1.0) -> LayoutedPresentationDocument:
+def build_layouted_presentation(document: PresentationDocument, *, debug_mode: bool = False, spacing_scale: float = 1.0, typography_scale: float = 1.0) -> LayoutedPresentationDocument:
     return LayoutedPresentationDocument(
         title=document.title,
         version=document.version,
         metadata=document.metadata,
-        slides=[_layout_slide(slide, debug_mode, spacing_scale) for slide in document.slides],
+        slides=[_layout_slide(slide, debug_mode, spacing_scale, typography_scale) for slide in document.slides],
     )

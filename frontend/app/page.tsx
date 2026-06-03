@@ -68,6 +68,19 @@ export default function HomePage() {
     }
   }
 
+  if (result) {
+    return (
+      <main className="min-h-screen">
+        <PresentationPreview
+          result={result}
+          error={error}
+          isLoading={isLoading}
+          progress={progress}
+        />
+      </main>
+    );
+  }
+
   return (
     <main className="relative mx-auto flex min-h-screen w-full max-w-[1480px] flex-col gap-8 overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
       <nav className="surface-panel sharp-panel relative z-10 flex items-center justify-between px-4 py-3 sm:px-5">

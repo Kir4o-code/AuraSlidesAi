@@ -1,8 +1,34 @@
+from enum import Enum
+
 from pydantic import BaseModel, Field
+
+
+class EntityType(str, Enum):
+    PERSON = "PERSON"
+    COMPANY = "COMPANY"
+    ORGANIZATION = "ORGANIZATION"
+    PLACE = "PLACE"
+    EVENT = "EVENT"
+    PRODUCT = "PRODUCT"
+    CONCEPT = "CONCEPT"
+
+
+class ResearchImageSource(str, Enum):
+    WIKIPEDIA = "WIKIPEDIA"
+    WIKIMEDIA_COMMONS = "WIKIMEDIA_COMMONS"
+    STOCK = "STOCK"
+
+
+class ImageSourceSelection(BaseModel):
+    entity_type: EntityType
+    image_source: ResearchImageSource
+    search_query: str
+    confidence: float = Field(ge=0.0, le=1.0)
 
 
 class ImageResearchRequest(BaseModel):
     prompt: str = Field(..., min_length=3)
+    context_text: str | None = None
     style: str | None = None
     preferred_orientation: str = "any"
     image_type: str = "any"
@@ -32,6 +58,7 @@ class ImageCandidate(BaseModel):
     author: str | None = None
     license_name: str
     license_url: str | None = None
+    download_tracking_url: str | None = None
     width: int | None = None
     height: int | None = None
     tags: list[str] = Field(default_factory=list)
@@ -65,5 +92,6 @@ class ImageResearchResponse(BaseModel):
     selected_image: SelectedImage | None
     selected_images: list[SelectedImage] = Field(default_factory=list)
     search_plan: SearchPlan | None
+    source_selection: ImageSourceSelection | None = None
     candidate_count: int
     warnings: list[str] = Field(default_factory=list)

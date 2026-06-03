@@ -42,6 +42,36 @@ QUERY_STOP_WORDS = {
     "visual",
     "with",
     "words",
+    "a",
+    "и",
+    "в",
+    "във",
+    "на",
+    "за",
+    "от",
+    "до",
+    "по",
+    "под",
+    "над",
+    "към",
+    "при",
+    "през",
+    "но",
+    "или",
+    "г",
+    "година",
+    "години",
+    "slide",
+    "context",
+    "show",
+    "most",
+    "relevant",
+    "concrete",
+    "scene",
+    "object",
+    "person",
+    "place",
+    "process",
 }
 
 
@@ -56,7 +86,7 @@ def compact_search_query(value: str, max_length: int = 95) -> str:
     match = re.search(r"Presentation visual for ['\"]([^'\"]+)['\"]:\s*(.+)", text, flags=re.I)
     if match:
         text = f"{match.group(1)} {match.group(2)}"
-    words = re.findall(r"[A-Za-z0-9]+", text)
+    words = re.findall(r"[^\W_]+", text, flags=re.UNICODE)
     out: list[str] = []
     seen: set[str] = set()
     for word in words:
@@ -174,17 +204,17 @@ class SearchPlanner:
         }
 
     def _fallback(self, request: ImageResearchRequest) -> SearchPlan:
-        style = request.style or ""
         query = compact_search_query(request.prompt)
         image_class = infer_image_class(request.prompt, request.image_class or request.image_type)
         profile = get_class_profile(image_class)
+        alternative_queries: list[str] = []
+        if image_class != image_class.PHOTO:
+            alternative_queries = [
+                *[f"{query} {term}".strip() for term in profile.query_terms[:2]],
+            ]
         return SearchPlan(
             main_query=query,
-            alternative_queries=[
-                f"{query} {style}".strip(),
-                *[f"{query} {term}".strip() for term in profile.query_terms[:3]],
-                f"{query} Wikimedia Commons",
-            ],
+            alternative_queries=alternative_queries,
             visual_requirements=[
                 "The image should clearly match the user prompt",
                 "The image should be visually clean and usable",

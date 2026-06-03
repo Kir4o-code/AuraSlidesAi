@@ -19,7 +19,7 @@ const IMAGE_SOURCE_OPTIONS: Array<{
   label: string;
 }> = [
   { value: "gemini", label: "Google image AI" },
-  { value: "image_research", label: "Image research" },
+  { value: "unsplash", label: "Image research" },
 ];
 
 const INITIAL_GUIDED_SLIDES: GuidedSlideIntent[] = [
@@ -54,13 +54,27 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
   const [guidedSlides, setGuidedSlides] = useState<GuidedSlideIntent[]>(INITIAL_GUIDED_SLIDES);
   const [imageSource, setImageSource] = useState<GeneratePresentationPayload["image_source"]>("gemini");
   const [step, setStep] = useState(1);
+  const [hasConfirmedImageSource, setHasConfirmedImageSource] = useState(false);
 
   function goNext() {
-    setStep((current) => Math.min(current + 1, WIZARD_STEPS.length));
+    setStep((current) => {
+      const nextStep = Math.min(current + 1, WIZARD_STEPS.length);
+      if (nextStep === WIZARD_STEPS.length) {
+        setHasConfirmedImageSource(false);
+      }
+      return nextStep;
+    });
   }
 
   function goBack() {
     setStep((current) => Math.max(current - 1, 1));
+  }
+
+  function selectStep(nextStep: number) {
+    setStep(nextStep);
+    if (nextStep === WIZARD_STEPS.length) {
+      setHasConfirmedImageSource(false);
+    }
   }
 
   const isFinalStep = step === WIZARD_STEPS.length;
@@ -102,7 +116,7 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
               key={item.id}
               type="button"
               disabled={isLoading}
-              onClick={() => setStep(item.id)}
+              onClick={() => selectStep(item.id)}
               className={`button-press interactive-outline sharp-control px-3 py-3 text-left ${
                 active
                   ? "[--control-bg:#18181b] shadow-[0_0_22px_rgba(34,211,238,0.08)]"
@@ -211,7 +225,10 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
                   key={option.value}
                   type="button"
                   disabled={isLoading}
-                  onClick={() => setImageSource(option.value)}
+                  onClick={() => {
+                    setImageSource(option.value);
+                    setHasConfirmedImageSource(true);
+                  }}
                   className={`button-press interactive-outline sharp-control px-4 py-3 text-sm font-semibold ${
                     active
                       ? "[--control-bg:#18181b] text-white"
@@ -241,11 +258,11 @@ export function PromptForm({ isLoading, progressLabel, progressValue, onSubmit }
         {isFinalStep ? (
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || !hasConfirmedImageSource}
             className="button-press interactive-outline sharp-control inline-flex items-center justify-center gap-2 px-5 py-3 text-sm font-semibold text-white [--control-bg:#18181b] hover:[--control-bg:#202024] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FiZap className="h-4 w-4" aria-hidden="true" />
-            {isLoading ? "Generating..." : "Generate presentation"}
+            {isLoading ? "Generating..." : hasConfirmedImageSource ? "Generate presentation" : "Choose image source"}
           </button>
         ) : (
           <button

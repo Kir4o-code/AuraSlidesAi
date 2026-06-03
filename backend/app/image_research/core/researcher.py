@@ -11,31 +11,34 @@ import httpx
 
 from app.image_research.config import PUBLIC_IMAGES_PREFIX, settings
 from app.image_research.core.clip_scorer import ClipScorer
-from app.image_research.core.downloader import DownloadError, download_image
+from app.image_research.core.downloader import DownloadError, download_image, track_remote_download
 from app.image_research.core.image_classes import get_class_profile, infer_image_class
 from app.image_research.core.license_checker import is_allowed_license, license_score
 from app.image_research.core.search_planner import SearchPlanner
 from app.image_research.core.search_planner import compact_search_query
+from app.image_research.core.source_selector import select_image_source_with_reason
 from app.image_research.core.storage import (
     copy_ranked_image,
     ensure_output_dirs,
     save_metadata,
     slugify,
 )
-from app.image_research.providers.openverse import OpenverseProvider
-from app.image_research.providers.pexels import PexelsProvider
-from app.image_research.providers.pixabay import PixabayProvider
-from app.image_research.providers.wikimedia import WikimediaProvider
+from app.image_research.providers.wikipedia import WikipediaProvider
+from app.image_research.providers.wikimedia_commons import WikimediaCommonsProvider
+from app.image_research.providers.unsplash import UnsplashProvider
 from app.image_research.schemas import (
     ImageCandidate,
     ImageResearchRequest,
     ImageResearchResponse,
+    ImageSourceSelection,
+    ResearchImageSource,
     SearchPlan,
     SelectedImage,
 )
 
 
 logger = logging.getLogger("image_researcher")
+STOCK_PROVIDER_NAMES = {"unsplash"}
 
 
 class ImageResearcher:
@@ -43,27 +46,31 @@ class ImageResearcher:
         ensure_output_dirs()
         self.planner = SearchPlanner()
         self.scorer = ClipScorer(settings.clip_model)
-        self.providers = [WikimediaProvider(), OpenverseProvider()]
-        if settings.pexels_api_key:
-            self.providers.append(PexelsProvider(settings.pexels_api_key))
-        if settings.pixabay_api_key:
-            self.providers.append(PixabayProvider(settings.pixabay_api_key))
+        self.providers = {
+            "wikipedia": WikipediaProvider(),
+            "wikimedia_commons": WikimediaCommonsProvider(),
+            "unsplash": UnsplashProvider(),
+        }
 
     async def research(self, request: ImageResearchRequest) -> ImageResearchResponse:
         request_id = f"research_{uuid.uuid4().hex[:12]}"
         prompt_slug = slugify(request.prompt)
         warnings: list[str] = []
         search_plan: SearchPlan | None = None
+        source_selection: ImageSourceSelection | None = None
         scored: list[ImageCandidate] = []
         started = time.perf_counter()
 
         try:
             logger.info(
-                "research.start id=%s prompt=%r image_type=%s requested=%s",
+                "research.start id=%s prompt=%r context=%r image_type=%s requested=%s prompt_ascii=%s context_ascii=%s",
                 request_id,
                 request.prompt,
+                request.context_text,
                 request.image_type,
                 request.max_candidates,
+                request.prompt.isascii(),
+                bool(request.context_text and request.context_text.isascii()),
             )
             search_plan, plan_warnings = await self.planner.create_plan(request)
             search_plan.image_class = infer_image_class(
@@ -78,7 +85,20 @@ class ImageResearcher:
                 search_plan.image_class,
                 len(search_plan.alternative_queries),
             )
-            candidates = await self._search(search_plan, request, warnings)
+            classification_input = request.context_text or request.prompt
+            source_selection, selection_reason = select_image_source_with_reason(classification_input, request.prompt)
+            logger.info(
+                "research.source id=%s entity_type=%s source=%s query=%r confidence=%.2f reason=%s classifier_input=%r planner_query=%r",
+                request_id,
+                source_selection.entity_type.value,
+                source_selection.image_source.value,
+                source_selection.search_query,
+                source_selection.confidence,
+                selection_reason,
+                classification_input,
+                search_plan.main_query,
+            )
+            candidates = await self._search(search_plan, request, source_selection, warnings)
             raw_count = len(candidates)
             candidates = self._dedupe(candidates)
             excluded_sources = set(request.exclude_source_urls)
@@ -135,6 +155,7 @@ class ImageResearcher:
                 {
                     "original_request": request.model_dump(),
                     "search_plan": search_plan.model_dump(),
+                    "source_selection": source_selection.model_dump() if source_selection else None,
                     "selected_image": selected.model_dump() if selected else None,
                     "selected_images": [image.model_dump() for image in selected_images],
                     "scored_candidates": [c.model_dump() for c in scored],
@@ -147,6 +168,7 @@ class ImageResearcher:
                 selected_image=selected,
                 selected_images=selected_images,
                 search_plan=search_plan,
+                source_selection=source_selection,
                 candidate_count=len(scored),
                 warnings=warnings,
             )
@@ -157,21 +179,27 @@ class ImageResearcher:
                 selected_image=None,
                 selected_images=[],
                 search_plan=search_plan,
+                source_selection=source_selection,
                 candidate_count=len(scored),
                 warnings=warnings,
             )
 
     async def _search(
+        self, plan: SearchPlan, request: ImageResearchRequest, source_selection: ImageSourceSelection, warnings: list[str]
+    ) -> list[ImageCandidate]:
+        if source_selection.image_source == ResearchImageSource.STOCK:
+            return await self._search_stock(plan, request, warnings)
+        return await self._search_entity(plan, request, source_selection, warnings)
+
+    async def _search_stock(
         self, plan: SearchPlan, request: ImageResearchRequest, warnings: list[str]
     ) -> list[ImageCandidate]:
-        queries = await self._expanded_queries(plan, request, warnings)
+        queries = self._stock_queries(plan, request)
         per_page = max(8, min(request.max_candidates * 4, 30))
         task_specs = []
         profile = get_class_profile(plan.image_class)
-        for provider in self.providers:
-            provider_name = provider.__class__.__name__.replace("Provider", "").lower()
-            # Class-aware provider routing.
-            if provider_name not in profile.allowed_providers:
+        for provider_name, provider in self.providers.items():
+            if provider_name not in profile.allowed_providers or provider_name not in STOCK_PROVIDER_NAMES:
                 continue
             for query in queries:
                 task_specs.append(
@@ -181,6 +209,12 @@ class ImageResearcher:
                         provider.search(query, per_page, plan.preferred_orientation, plan.image_class),
                     )
                 )
+        logger.info(
+            "research.stock queries=%s providers=%s image_class=%s",
+            queries,
+            sorted({provider_name for provider_name, _, _ in task_specs}),
+            plan.image_class,
+        )
         results = await asyncio.gather(*(task for _, _, task in task_specs), return_exceptions=True)
         candidates: list[ImageCandidate] = []
         errors: Counter[str] = Counter()
@@ -199,10 +233,84 @@ class ImageResearcher:
         )
         return candidates
 
+    def _stock_queries(self, plan: SearchPlan, request: ImageResearchRequest) -> list[str]:
+        queries = [
+            compact_search_query(plan.main_query, max_length=60),
+            compact_search_query(request.prompt, max_length=60),
+            *[compact_search_query(query, max_length=60) for query in plan.alternative_queries[:2]],
+        ]
+        seen: set[str] = set()
+        out: list[str] = []
+        for query in queries:
+            key = query.lower()
+            if query and key not in seen:
+                seen.add(key)
+                out.append(query)
+        return out[:3]
+
+    async def _search_entity(
+        self,
+        plan: SearchPlan,
+        request: ImageResearchRequest,
+        source_selection: ImageSourceSelection,
+        warnings: list[str],
+    ) -> list[ImageCandidate]:
+        query = source_selection.search_query or compact_search_query(plan.main_query or request.prompt, max_length=80)
+        wiki_provider = self.providers["wikipedia"]
+        commons_provider = self.providers["wikimedia_commons"]
+        per_page = max(3, min(request.max_candidates * 2, 10))
+        logger.info(
+            "research.entity entity_type=%s query=%r per_page=%s product_fallback=%s",
+            source_selection.entity_type.value,
+            query,
+            per_page,
+            source_selection.entity_type.value == "PRODUCT",
+        )
+
+        wiki_candidates = await wiki_provider.search(query, per_page=per_page, orientation=plan.preferred_orientation, image_type=plan.image_class)
+        if wiki_candidates and request.max_candidates <= 1:
+            logger.info("research.search entity=%s source=wikipedia candidates=%s", source_selection.entity_type.value, len(wiki_candidates))
+            return wiki_candidates
+
+        commons_candidates = await commons_provider.search(query, per_page=per_page, orientation=plan.preferred_orientation, image_type=plan.image_class)
+        if wiki_candidates:
+            logger.info(
+                "research.search entity=%s source=wikipedia+commons wikipedia=%s commons=%s",
+                source_selection.entity_type.value,
+                len(wiki_candidates),
+                len(commons_candidates),
+            )
+            return [*wiki_candidates, *commons_candidates]
+        if commons_candidates:
+            warnings.append("Wikipedia did not provide a suitable image; Wikimedia Commons fallback used.")
+            logger.info("research.search entity=%s source=wikimedia_commons candidates=%s", source_selection.entity_type.value, len(commons_candidates))
+            return commons_candidates
+
+        if source_selection.entity_type.value == "PRODUCT":
+            warnings.append("Entity image not found on Wikipedia or Wikimedia Commons; falling back to stock provider.")
+            return await self._search_stock(plan, request, warnings)
+
+        warnings.append("No suitable entity image found on Wikipedia or Wikimedia Commons.")
+        return []
+
     async def _expanded_queries(
         self, plan: SearchPlan, request: ImageResearchRequest, warnings: list[str]
     ) -> list[str]:
         profile = get_class_profile(plan.image_class)
+        if plan.image_class == "photo":
+            queries = [
+                compact_search_query(plan.main_query, max_length=60),
+                compact_search_query(request.prompt, max_length=60),
+            ]
+            seen: set[str] = set()
+            out: list[str] = []
+            for query in queries:
+                key = query.lower()
+                if query and key not in seen:
+                    seen.add(key)
+                    out.append(query)
+            return out[:2]
+
         # Class context expands generic slide prompts into provider-specific searches.
         queries = [
             compact_search_query(request.prompt),
@@ -240,7 +348,6 @@ class ImageResearcher:
                         "search": query,
                         "limit": 5,
                         "namespace": 0,
-                        "origin": "*",
                     },
                     headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
                 )
@@ -257,7 +364,6 @@ class ImageResearcher:
                             "prop": "categories|pageimages",
                             "cllimit": 10,
                             "piprop": "name|original",
-                            "origin": "*",
                         },
                         headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
                     )
@@ -318,7 +424,6 @@ class ImageResearcher:
                             "search": search,
                             "limit": 3,
                             "namespace": 0,
-                            "origin": "*",
                         },
                         headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
                     )
@@ -334,7 +439,6 @@ class ImageResearcher:
                                     "titles": title,
                                     "prop": "langlinks",
                                     "lllang": "en",
-                                    "origin": "*",
                                 },
                                 headers={"User-Agent": "ImageResearcher/1.0 (local-image-research@example.invalid)"},
                             )
@@ -400,18 +504,13 @@ class ImageResearcher:
         downloaded: list[ImageCandidate] = []
         failures: Counter[str] = Counter()
         seen_hashes: set[str] = set(excluded_hashes)
-        wikimedia_rate_limited = False
 
         for candidate in candidates:
             if len(downloaded) >= scoring_pool_size:
                 break
-            if wikimedia_rate_limited and candidate.source == "wikimedia":
-                failures["wikimedia skipped after rate limit"] += 1
-                continue
             try:
-                if candidate.source == "wikimedia":
-                    await asyncio.sleep(0.9)
                 candidate.local_temp_path = await download_image(candidate.image_url, request_id)
+                await track_remote_download(candidate.download_tracking_url)
                 # Hash de-dupe prevents repeated images across slides and providers.
                 candidate.content_hash = hashlib.sha256(Path(candidate.local_temp_path).read_bytes()).hexdigest()
                 if candidate.content_hash in seen_hashes:
@@ -423,8 +522,6 @@ class ImageResearcher:
                 downloaded.append(candidate)
             except DownloadError as exc:
                 failures[f"{candidate.source} HTTP {exc.status_code or 'error'}"] += 1
-                if candidate.source == "wikimedia" and exc.status_code == 429:
-                    wikimedia_rate_limited = True
             except Exception as exc:
                 failures[f"{candidate.source} {type(exc).__name__}"] += 1
 
@@ -590,16 +687,10 @@ class ImageResearcher:
             }
             if any(term in text for term in educational_terms):
                 score += 0.22
-            if candidate.source == "pexels":
-                score -= 0.3
-            if candidate.source == "pixabay" and not any(term in text for term in educational_terms):
-                score -= 0.16
         if any(term.lower() in text for term in profile.query_terms):
             score += 0.16
         if any(term.lower() in text for term in profile.bad_terms):
             score -= 0.25
-        if candidate.source == "wikimedia":
-            score += candidate.factual_score
         if any(term in text for term in {"reenactment", "replica", "memorial", "statue", "costume"}):
             if plan and any(term in " ".join(plan.visual_requirements).lower() for term in {"authentic", "documentary", "historical"}):
                 score -= 0.22
@@ -665,6 +756,7 @@ class ImageResearcher:
             selected_image=None,
             selected_images=[],
             search_plan=search_plan,
+            source_selection=None,
             candidate_count=0,
             warnings=warnings,
         )

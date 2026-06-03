@@ -174,11 +174,16 @@ IMAGE PROMPT RULES (EXTREMELY IMPORTANT):
 - Image prompts must feel like they belong in a polished presentation, not an AI art gallery.
 - Prefer grounded editorial visuals: realistic scenes, relevant objects, clean environments, charts, product/process context, or restrained diagrams.
 - Think logically about the slide: ask for the image a presenter would actually place beside that point.
+- The image must illustrate the slide's actual claim, mechanism, example, or comparison, not just the general topic.
+- Prefer one concrete subject or scene per slide. Do not blend unrelated concepts into one image.
+- When a slide mentions a process, show the process. When it mentions a person, place, event, object, or document, show that exact thing.
+- If the slide is abstract, choose a concrete real-world scene or object that directly explains it.
 - Avoid "8k", camera flex, hype words, floating icons, surreal metaphors, generic neural networks, random math symbols, and glowing abstract backgrounds.
 - Do not ask for visible text, labels, captions, UI copy, or words inside the image unless the slide truly needs a simple chart-like visual.
 - For sensitive topics, keep visuals respectful, realistic, and non-sensational.
 - For every image-backed slide, set image_class to exactly one of: photo, diagram, illustration, icon.
 - Preserve named people, characters, places, works, objects, and events inside image prompts so external image research can search precisely.
+- Do not default to decorative lab photos, random office workers, or generic technology screens unless the slide is specifically about those scenes.
 - Use photo for real people, places, objects, historical/documentary topics, or editorial visuals.
 - Use diagram for explanatory structures, systems, charts, flows, anatomy, maps, and timelines.
 - Use illustration for drawn/vector educational visuals that are not strict diagrams.
@@ -265,7 +270,34 @@ def _fallback_image_prompt(title: str | None, presentation_title: str, *, slide_
     return f"Grounded supporting visual for {topic}, realistic or clean editorial style, no text."
 
 
-def _normalize_image_prompt(raw_prompt: str | None, title: str | None, presentation_title: str, *, slide_type: str = "supporting") -> str:
+def _supporting_visual_context(
+    title: str | None,
+    subtitle: str | None,
+    bullets: list[str] | None,
+) -> str:
+    parts: list[str] = []
+    if title:
+        parts.append(title.strip())
+    if subtitle:
+        parts.append(subtitle.strip())
+    for bullet in (bullets or [])[:2]:
+        cleaned = bullet.strip()
+        if cleaned:
+            parts.append(cleaned)
+    if not parts:
+        return ""
+    return " | ".join(parts)[:220]
+
+
+def _normalize_image_prompt(
+    raw_prompt: str | None,
+    title: str | None,
+    presentation_title: str,
+    *,
+    slide_type: str = "supporting",
+    subtitle: str | None = None,
+    bullets: list[str] | None = None,
+) -> str:
     base = (raw_prompt or "").strip() or _fallback_image_prompt(title, presentation_title, slide_type=slide_type)
     if re.search(
         r"\b(neural networks?|glowing|floating|surreal|abstract|futuristic|random symbols?|ai art|conceptual visualization)\b",
@@ -290,10 +322,13 @@ def _normalize_image_prompt(raw_prompt: str | None, title: str | None, presentat
     base = re.sub(r"\s+", " ", base).strip(" ,.")
 
     topic = title or presentation_title or "this slide"
+    context = _supporting_visual_context(title, subtitle, bullets)
     prompt = (
         f"Presentation visual for '{topic}': {base}. "
+        f"Slide context: {context}. "
+        "Show the most relevant concrete scene, object, person, place, or process from the slide context. "
         "Keep it grounded, relevant, and restrained. Match a clean modern deck. "
-        "No visible words, labels, captions, logos, surreal symbols, or generic AI abstractions."
+        "No visible words, labels, captions, logos, surreal symbols, generic technology screens, or generic AI abstractions."
     )
     return prompt[:500].rstrip(" ,.")
 
@@ -338,6 +373,25 @@ def _fallback_slide_title(presentation_title: str, index: int, *, variant: str =
     }
     options = titles.get(variant, titles["default"])
     return options[(index - 1) % len(options)]
+
+
+def _infer_comparison_title(existing: str | None, bullets: list[str], fallback: str) -> str:
+    normalized = _trim_text(existing, 120)
+    if normalized and normalized.lower() not in {"option a", "option b", "left", "right"}:
+        return normalized
+
+    combined = " ".join(bullets).lower()
+    keyword_map = [
+        (("gemini", "generated", "generate", "ai", "custom", "unique"), "AI Generation"),
+        (("unsplash", "stock", "editorial", "realistic scene", "photography", "photo library"), "Unsplash"),
+        (("manual", "designer", "handmade", "curated"), "Manual Design"),
+        (("diagram", "chart", "structured", "explain"), "Diagrams"),
+        (("photo", "photos", "real world", "documentary"), "Photography"),
+    ]
+    for terms, label in keyword_map:
+        if any(term in combined for term in terms):
+            return label
+    return fallback
 
 
 def _normalize_timeline(steps: list[GeminiTimelineStep]) -> list[GeminiTimelineStep]:
@@ -403,17 +457,30 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
         )
         raw_image_prompt = slide.image_prompt
         slide.image_class = _normalize_image_class(slide.image_class, " ".join(filter(None, [slide.title, raw_image_prompt])), default=ImageClass.PHOTO)
-        slide.image_prompt = _normalize_image_prompt(raw_image_prompt, slide.title, presentation_title)
+        slide.image_prompt = _normalize_image_prompt(
+            raw_image_prompt,
+            slide.title,
+            presentation_title,
+            subtitle=slide.subtitle,
+            bullets=slide.bullets,
+        )
     elif slide.type == SlideType.HERO_IMAGE.value:
         slide.title = slide.title or "Visual focus"
         raw_image_prompt = slide.image_prompt
         slide.image_class = _normalize_image_class(slide.image_class, " ".join(filter(None, [slide.title, raw_image_prompt])), default=ImageClass.PHOTO)
-        slide.image_prompt = _normalize_image_prompt(raw_image_prompt, slide.title, presentation_title, slide_type=SlideType.HERO_IMAGE.value)
+        slide.image_prompt = _normalize_image_prompt(
+            raw_image_prompt,
+            slide.title,
+            presentation_title,
+            slide_type=SlideType.HERO_IMAGE.value,
+            subtitle=slide.subtitle,
+            bullets=slide.bullets,
+        )
         slide.subtitle = slide.subtitle or ""
     elif slide.type == SlideType.COMPARISON.value:
         slide.title = slide.title or "Comparison"
-        slide.left_title = slide.left_title or "Option A"
-        slide.right_title = slide.right_title or "Option B"
+        slide.left_title = _infer_comparison_title(slide.left_title, slide.left_bullets, "Option A")
+        slide.right_title = _infer_comparison_title(slide.right_title, slide.right_bullets, "Alternative")
         slide.left_bullets = _normalize_bullets(
             slide.left_bullets,
             limit=4,
@@ -424,6 +491,8 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
             limit=4,
             fallback=_fallback_bullets_for_slide(slide.right_title or slide.title or presentation_title, presentation_title, variant="comparison", slot=index + 1)[1:],
         )
+        slide.left_title = _infer_comparison_title(slide.left_title, slide.left_bullets, "Option A")
+        slide.right_title = _infer_comparison_title(slide.right_title, slide.right_bullets, "Alternative")
     elif slide.type == SlideType.TIMELINE.value:
         slide.title = slide.title or "Timeline"
         slide.timeline = _normalize_timeline(slide.timeline)
@@ -500,7 +569,13 @@ def _normalize_plan(
         if signature in seen_signatures and slide.type == SlideType.TITLE_BULLETS_IMAGE.value:
             slide.title = _fallback_slide_title(plan.title, index, variant="image")
             slide.bullets = _fallback_bullets_for_slide(plan.title, plan.title, variant="image", slot=index)
-            slide.image_prompt = _normalize_image_prompt(slide.image_prompt, slide.title, plan.title)
+            slide.image_prompt = _normalize_image_prompt(
+                slide.image_prompt,
+                slide.title,
+                plan.title,
+                subtitle=slide.subtitle,
+                bullets=slide.bullets,
+            )
         seen_signatures.add(signature)
 
     return GeminiPresentationPlan(
@@ -530,6 +605,24 @@ def _extract_json_text(response: Any) -> str:
         if text_parts:
             return "".join(text_parts)
     raise GeminiPlanningError("Gemini returned an empty planning response.")
+
+
+def _looks_truncated_json(payload: str) -> bool:
+    text = payload.rstrip()
+    if not text:
+        return False
+    if not text.startswith("{"):
+        return False
+    return not text.endswith("}")
+
+
+def _planning_retry_instruction(slide_count: int) -> str:
+    return (
+        "The previous response was invalid or truncated. "
+        f"Retry and return EXACTLY {slide_count} slides as valid compact JSON only. "
+        "Keep every bullet under 10 words, keep notes extremely short, and avoid long image_prompt wording. "
+        "Do not include prose before or after the JSON."
+    )
 
 
 def _extract_image_bytes(response: Any) -> bytes:
@@ -634,28 +727,46 @@ Topic:
 Return JSON only.
 """.strip()
 
-    try:
-        # Structured output keeps the MVP stable by asking Gemini for JSON that
-        # already matches the planning schema instead of free-form text.
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model=settings.gemini_planning_model,
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                response_mime_type="application/json",
-                response_json_schema=GEMINI_PLANNING_JSON_SCHEMA,
-                temperature=0.3,
-            ),
-        )
-    except Exception as exc:
-        raise GeminiPlanningError(_provider_message(exc)) from exc
+    planning_error: Exception | None = None
+    response_text = ""
+    for attempt in range(2):
+        attempt_prompt = user_prompt if attempt == 0 else f"{user_prompt}\n\n{_planning_retry_instruction(slide_count)}"
+        try:
+            # Structured output keeps the MVP stable by asking Gemini for JSON that
+            # already matches the planning schema instead of free-form text.
+            response = await asyncio.to_thread(
+                client.models.generate_content,
+                model=settings.gemini_planning_model,
+                contents=attempt_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    response_mime_type="application/json",
+                    response_json_schema=GEMINI_PLANNING_JSON_SCHEMA,
+                    temperature=0.3 if attempt == 0 else 0.15,
+                    max_output_tokens=8192 if attempt == 0 else 6144,
+                ),
+            )
+        except Exception as exc:
+            raise GeminiPlanningError(_provider_message(exc)) from exc
 
-    try:
-        plan = GeminiPresentationPlan.model_validate_json(_extract_json_text(response))
-    except (ValidationError, json.JSONDecodeError, GeminiPlanningError) as exc:
-        logger.exception("Gemini planning returned invalid JSON.")
-        raise GeminiPlanningError("Gemini returned invalid presentation JSON.") from exc
+        try:
+            response_text = _extract_json_text(response)
+            plan = GeminiPresentationPlan.model_validate_json(response_text)
+            break
+        except (ValidationError, json.JSONDecodeError, GeminiPlanningError) as exc:
+            planning_error = exc
+            logger.warning(
+                "Gemini planning returned invalid JSON on attempt %s/2. chars=%s truncated=%s error=%s",
+                attempt + 1,
+                len(response_text or ""),
+                _looks_truncated_json(response_text) if response_text else False,
+                exc,
+            )
+            if attempt == 1:
+                logger.exception("Gemini planning failed after retry.")
+                raise GeminiPlanningError("Gemini returned invalid presentation JSON.") from exc
+    else:  # pragma: no cover - defensive loop guard
+        raise GeminiPlanningError("Gemini returned invalid presentation JSON.") from planning_error
 
     normalized_plan = _normalize_plan(plan, slide_count, slide_outline if planning_mode == PlanningMode.GUIDED else None)
     presentation = _plan_to_presentation(normalized_plan)
@@ -699,8 +810,9 @@ async def generate_slide_image(prompt: str) -> bytes:
     final_prompt = (
         "Create one grounded, presentation-ready 16:9 visual. "
         "It should feel like a real slide asset: relevant, restrained, and clean. "
-        "Avoid generic AI art, glowing abstract backgrounds, floating icons, and sensational stock-photo cliches. "
-        "Do not render visible text, labels, captions, logos, or UI copy. "
+        "Use the slide context literally and prioritize the most specific subject mentioned. "
+        "Avoid generic AI art, glowing abstract backgrounds, floating icons, random labs, random office workers, and sensational stock-photo cliches. "
+        "Do not render visible text, labels, captions, logos, UI copy, or unrelated decorative symbolism. "
         f"Prompt: {prompt}"
     )
 

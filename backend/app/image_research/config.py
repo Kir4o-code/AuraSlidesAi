@@ -24,14 +24,15 @@ def env_value(name: str) -> str | None:
 class Settings:
     groq_api_key: str | None = env_value("GROQ_API_KEY")
     groq_model: str = os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile"
-    pexels_api_key: str | None = env_value("PEXELS_API_KEY")
-    pixabay_api_key: str | None = env_value("PIXABAY_API_KEY")
-    openverse_client_id: str | None = env_value("OPENVERSE_CLIENT_ID")
-    openverse_client_secret: str | None = env_value("OPENVERSE_CLIENT_SECRET")
+    unsplash_access_key: str | None = env_value("UNSPLASH_ACCESS_KEY")
     clip_model: str = os.getenv("CLIP_MODEL") or "openai/clip-vit-base-patch32"
 
 
 settings = Settings()
+
+
+def get_unsplash_access_key() -> str | None:
+    return env_value("UNSPLASH_ACCESS_KEY")
 
 OUTPUT_DIR = IMAGE_RESEARCH_DIR
 IMAGES_DIR = OUTPUT_DIR / "images"

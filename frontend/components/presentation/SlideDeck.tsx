@@ -142,6 +142,9 @@ function LayoutElementRenderer({
     textAlign: align,
     color: tokens.textColor,
     overflow: "hidden",
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+    boxSizing: "border-box",
   };
 
   const content = element.content as Record<string, unknown>;
@@ -155,13 +158,15 @@ function LayoutElementRenderer({
           border: `1px solid ${tokens.borderColor}`,
           borderRadius: tokens.panelStyle === "square" ? 0 : tokens.panelRadius,
           boxShadow: tokens.shadow,
+          padding: 0,
+          overflow: "hidden",
         }}
       >
         {element.children.map((child) => (
           <LayoutElementRenderer key={child.id} element={child} tokens={tokens} debug={debug} />
         ))}
         {debug ? (
-          <div className="pointer-events-none absolute inset-0 rounded-[24px] border border-dashed border-rose-500/70" />
+          <div className="pointer-events-none absolute inset-0 border border-dashed border-rose-500/70" style={{ borderRadius: tokens.panelStyle === "square" ? 0 : tokens.panelRadius }} />
         ) : null}
       </div>
     );
@@ -179,6 +184,7 @@ function LayoutElementRenderer({
           border: `1px solid ${tokens.borderColor}`,
           background: `linear-gradient(180deg, ${tokens.surface}, ${tokens.backgroundAlt})`,
           padding: tokens.imageFrameInset,
+          overflow: "hidden",
         }}
       >
         {imageUrl ? (
@@ -186,7 +192,11 @@ function LayoutElementRenderer({
             src={imageUrl}
             alt={alt}
             className="h-full w-full"
-            style={{ borderRadius: Math.max(0, tokens.imageRadius - tokens.imageFrameInset), objectFit: (content.fit as CSSProperties["objectFit"]) ?? tokens.imageFit }}
+            style={{
+              display: "block",
+              borderRadius: Math.max(0, tokens.imageRadius - tokens.imageFrameInset),
+              objectFit: (content.fit as CSSProperties["objectFit"]) ?? tokens.imageFit,
+            }}
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-5 text-center text-sm leading-6" style={{ color: tokens.textColor }}>
@@ -210,24 +220,29 @@ function LayoutElementRenderer({
 
   if (element.kind === "bullet_item") {
     const isLine = tokens.bulletStyle === "lines";
+    const bulletPaddingY = Math.round(12 * tokens.spacingScale);
+    const bulletPaddingX = Math.round(16 * tokens.spacingScale);
+    const bulletGap = Math.round(16 * tokens.spacingScale);
     return (
       <div
         style={{
           ...style,
           display: "flex",
           alignItems: "flex-start",
-          gap: 16,
-          padding: "12px 14px",
+          gap: bulletGap,
+          padding: `${bulletPaddingY}px ${bulletPaddingX}px`,
           borderRadius: isLine ? 0 : Math.max(12, tokens.panelRadius - 4),
           border: isLine ? 0 : `1px solid ${tokens.borderColor}`,
           borderLeft: isLine ? `3px solid ${tokens.accentColor}` : undefined,
           background: isLine ? "transparent" : `${tokens.surface}d9`,
+          fontWeight: 500,
+          lineHeight: 1.4,
         }}
       >
         <span className="mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-full" style={{ background: `${tokens.accentColor}24`, color: tokens.accentColor }}>
           <BulletIcon name={content.icon as string | undefined} />
         </span>
-        <span style={{ flex: 1 }}>{element.text}</span>
+        <span style={{ flex: 1, minWidth: 0, overflowWrap: "anywhere", wordBreak: "break-word", fontWeight: 500, lineHeight: 1.4 }}>{element.text}</span>
       </div>
     );
   }

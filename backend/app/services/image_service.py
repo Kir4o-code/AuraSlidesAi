@@ -2,9 +2,11 @@ import asyncio
 import logging
 import os
 from pathlib import Path
+import re
 from typing import Any
 
 from app.image_research.core.researcher import ImageResearcher
+from app.image_research.core.search_planner import compact_search_query
 from app.image_research.schemas import ImageResearchRequest, SelectedImage
 from app.schemas.presentation import ImageClass, ImageSource, Presentation, ResolvedImageAsset, SlideType
 from app.services.gemini_service import (
@@ -54,24 +56,134 @@ def _infer_research_image_type(prompt: str) -> str:
     return "any"
 
 
+def _extract_scene_from_image_prompt(prompt: str) -> str:
+    text = " ".join(prompt.split())
+    match = re.search(r"Presentation visual for ['\"]([^'\"]+)['\"]:\s*(.+)", text, flags=re.I)
+    if match:
+        text = match.group(2)
+    text = re.split(r"\bKeep it\b|\bMatch a\b|\bNo visible\b|\bNo text\b", text, maxsplit=1, flags=re.I)[0]
+    if re.search(r"\b(illustration|diagram|icon|vector|drawing|cross[- ]section|anatomy)\b", text, flags=re.I):
+        return ""
+    text = re.sub(r"\b(grounded|relevant|restrained|modern|clean|editorial|cinematic|professional)\b", " ", text, flags=re.I)
+    return " ".join(text.split(" ,.:;"))[:220].strip()
+
+
+def _slide_concept_terms(title: str, bullets: list[str]) -> str:
+    combined = " ".join([title, *bullets]).lower()
+    concept_rules = [
+        (("population", "growth", "demographic"), "population health"),
+        (("drug", "dosage", "absorption", "pharmacology"), "drug dosage"),
+        (("disease", "spread", "epidemic", "infection"), "disease spread"),
+        (("cells", "biology", "lab", "laboratory"), "cell biology"),
+        (("bridge", "structural", "construction"), "structural engineering"),
+        (("fluid", "dynamics", "mechanics"), "fluid dynamics"),
+        (("machine learning", "algorithm", "model"), "machine learning"),
+        (("network", "routing", "systems"), "computer networks"),
+        (("climate", "weather", "environment"), "climate research"),
+        (("students", "classroom", "learning"), "classroom learning"),
+    ]
+    matched: list[str] = []
+    for terms, label in concept_rules:
+        if any(term in combined for term in terms):
+            matched.append(label)
+    return " ".join(matched[:2]).strip()
+
+
+def _domain_signal_counts(title: str, bullets: list[str], prompt: str) -> dict[str, int]:
+    text = " ".join([title, *bullets, prompt]).lower()
+    domain_rules = {
+        "medical": ("disease", "drug", "dosage", "health", "medical", "patient", "population", "epidemic", "cells", "biology", "pharmacology", "laboratory"),
+        "engineering": ("engineering", "bridge", "structural", "fluid", "design", "construction", "manufacturing", "mechanics"),
+        "technology": ("machine learning", "data", "algorithm", "network", "software", "computer", "code", "analytics", "digital", "ai"),
+        "environment": ("climate", "weather", "environment", "energy", "solar", "wind", "sustainability"),
+        "education": ("education", "students", "classroom", "teacher", "school", "learning"),
+    }
+    return {
+        domain: sum(1 for term in terms if term in text)
+        for domain, terms in domain_rules.items()
+    }
+
+
+def _primary_scene_profile(title: str, bullets: list[str], prompt: str) -> tuple[str, tuple[str, ...]]:
+    scores = _domain_signal_counts(title, bullets, prompt)
+    if not any(scores.values()):
+        return "", ()
+
+    ordered = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    domain, score = ordered[0]
+    if score <= 0:
+        return "", ()
+
+    if domain == "medical":
+        return "medical researcher in laboratory", ("medical", "research", "laboratory", "public health", "drug")
+    if domain == "engineering":
+        return "engineer reviewing technical design", ("engineering", "structural", "design", "mechanics", "industrial")
+    if domain == "technology":
+        return "data analyst at computer monitors", ("data", "analytics", "software", "machine learning", "technology")
+    if domain == "environment":
+        return "environmental research team", ("climate", "environment", "energy", "sustainability", "research")
+    if domain == "education":
+        return "students in classroom with laptop", ("education", "students", "classroom", "learning", "school")
+    return "", ()
+
+
+def _photo_scene_hint(title: str, bullets: list[str], prompt: str) -> str:
+    scene, _ = _primary_scene_profile(title, bullets, prompt)
+    return scene
+
+
+def _domain_concept_terms(title: str, bullets: list[str], prompt: str) -> str:
+    _, preferred_terms = _primary_scene_profile(title, bullets, prompt)
+    if not preferred_terms:
+        return _slide_concept_terms(title, bullets)
+
+    text = " ".join([title, *bullets, prompt]).lower()
+    matched = [term for term in preferred_terms if term in text]
+    if matched:
+        return " ".join(matched[:2]).strip()
+
+    return ""
+
+
 def _research_prompt(slide: Any, presentation_title: str) -> str:
     title = (getattr(slide, "title", None) or "").strip()
     prompt = (getattr(slide, "image_prompt", None) or "").strip()
-    mood = (getattr(slide, "visual_mood", None) or "").strip()
     bullets = [str(item).strip() for item in (getattr(slide, "bullets", None) or []) if str(item).strip()]
-    context = " ".join([presentation_title, title, *bullets, prompt]).lower()
-    intent = ""
-    if any(term in context for term in ("series", "movie", "film", "episode", "character", "cast", "show")):
-        intent = "official still"
-    elif any(term in context for term in ("place", "town", "location", "building", "object", "artifact")):
-        intent = "official image"
-    parts = [title, presentation_title, *bullets[:2], prompt, mood, intent]
+    subject = compact_search_query(" ".join([title, *bullets[:1]]), max_length=28)
+    concept_terms = _domain_concept_terms(title, bullets, prompt)
+    scene_hint = _photo_scene_hint(title, bullets, prompt)
+    prompt_scene = compact_search_query(_extract_scene_from_image_prompt(prompt), max_length=30) if prompt else ""
+    prompt_scene = prompt_scene if prompt_scene and prompt_scene.lower() not in {"classroom", "learning", "students"} else ""
+    has_non_ascii_subject = any(not part.isascii() for part in (title, presentation_title) if part)
+    if has_non_ascii_subject:
+        candidates = [subject, title, presentation_title, prompt_scene, scene_hint, concept_terms]
+    else:
+        candidates = [scene_hint, concept_terms, prompt_scene, subject, title, presentation_title]
     unique: list[str] = []
-    for part in parts:
-        cleaned = " ".join(part.split()).rstrip(" .,:;")
-        if cleaned and cleaned.lower() not in {value.lower() for value in unique}:
+    seen: set[str] = set()
+    for part in candidates:
+        cleaned = " ".join(part.split()).strip(" .,:;")
+        key = cleaned.lower()
+        if cleaned and key not in seen:
+            seen.add(key)
             unique.append(cleaned)
-    return ". ".join(unique)[:500]
+
+    primary = unique[0] if unique else ""
+    secondary = unique[1] if len(unique) > 1 else ""
+
+    if primary and secondary:
+        return compact_search_query(f"{primary} {secondary}", max_length=44)
+    if primary:
+        return compact_search_query(primary, max_length=34)
+    return ""
+
+
+def _research_context(slide: Any, presentation_title: str) -> str:
+    title = (getattr(slide, "title", None) or "").strip()
+    subtitle = (getattr(slide, "subtitle", None) or "").strip()
+    bullets = [str(item).strip() for item in (getattr(slide, "bullets", None) or []) if str(item).strip()]
+    parts = [presentation_title, title, subtitle, *bullets[:3]]
+    return " | ".join(part for part in parts if part)
 
 
 def _resolved_from_research_image(
@@ -133,17 +245,28 @@ async def _resolve_one_research_image(
     used_hashes: set[str],
 ) -> None:
     prompt = _research_prompt(slide, presentation_title)
+    context_text = _research_context(slide, presentation_title)
     if not prompt:
         return
+    logger.info(
+        "Prepared research prompt. slide_title=%r context=%r prompt=%r image_prompt=%r context_ascii=%s prompt_ascii=%s",
+        getattr(slide, "title", None),
+        context_text,
+        prompt,
+        getattr(slide, "image_prompt", None),
+        context_text.isascii() if context_text else True,
+        prompt.isascii(),
+    )
 
     try:
         response = await _get_image_researcher().research(
             ImageResearchRequest(
                 prompt=prompt,
+                context_text=context_text,
                 style=style,
                 preferred_orientation="landscape",
-                image_type=_infer_research_image_type(prompt),
-                image_class=(getattr(slide, "image_class", None) or _infer_research_image_type(prompt)),
+                image_type="photo",
+                image_class=ImageClass.PHOTO.value,
                 max_candidates=1,
                 exclude_source_urls=sorted(used_source_urls),
                 exclude_hashes=sorted(used_hashes),
@@ -192,7 +315,7 @@ async def enrich_presentation_images(
     used_hashes: set[str] = set()
     async def resolve(slide: Any) -> None:
         try:
-            if image_source == ImageSource.IMAGE_RESEARCH:
+            if image_source == ImageSource.UNSPLASH:
                 await _resolve_one_research_image(slide, presentation.title, presentation.theme, used_source_urls, used_hashes)
             else:
                 await _resolve_one_slide_image(slide, presentation.theme)

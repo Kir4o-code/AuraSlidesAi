@@ -50,7 +50,7 @@ async def generate_presentation_route(
         if payload.template:
             presentation.theme = payload.template
         settings = get_settings()
-        if payload.image_source == ImageSource.IMAGE_RESEARCH or settings.enable_image_generation:
+        if payload.image_source == ImageSource.UNSPLASH or settings.enable_image_generation:
             logger.info(
                 "[%s] Starting image enrichment. source=%s",
                 request_id,

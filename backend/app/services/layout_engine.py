@@ -544,11 +544,13 @@ def _render_layout_element(slide, element: LayoutElement, theme: ThemeDefinition
         textbox = slide.shapes.add_textbox(Inches(_px(text_left)), Inches(_px(text_top)), Inches(_px(max(1, text_width))), Inches(_px(max(1, text_height))))
         frame = textbox.text_frame
         frame.word_wrap = element.wrap
+        frame.auto_size = MSO_AUTO_SIZE.NONE
+        frame.vertical_anchor = MSO_ANCHOR.TOP
         frame.clear()
-        frame.margin_left = Inches(0.04)
-        frame.margin_right = Inches(0.04)
-        frame.margin_top = Inches(0.035)
-        frame.margin_bottom = Inches(0.035)
+        frame.margin_left = Inches(0.02)
+        frame.margin_right = Inches(0.02)
+        frame.margin_top = Inches(0.02)
+        frame.margin_bottom = Inches(0.02)
         paragraph = frame.paragraphs[0]
         paragraph.alignment = {
             Alignment.START: PP_ALIGN.LEFT,
@@ -557,7 +559,7 @@ def _render_layout_element(slide, element: LayoutElement, theme: ThemeDefinition
         }[element.align]
         paragraph.space_before = Pt(0)
         paragraph.space_after = Pt(0)
-        paragraph.line_spacing = element.line_height or 1.18
+        paragraph.line_spacing = min(element.line_height or 1.18, 1.18)
         run = paragraph.add_run()
         run.text = element.text or ""
         run.font.name = _semantic_font_name(theme, element.region, element.kind)

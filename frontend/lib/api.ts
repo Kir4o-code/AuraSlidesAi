@@ -149,7 +149,8 @@ export interface GeneratePresentationPayload {
   slide_count: number;
   style: string;
   template?: ThemeName;
-  image_source?: "gemini" | "image_research";
+  // "unsplash" is the backend wire value for the broader image-research pipeline.
+  image_source?: "gemini" | "unsplash";
   planning_mode?: PlanningMode;
   slide_outline?: GuidedSlideIntent[];
 }

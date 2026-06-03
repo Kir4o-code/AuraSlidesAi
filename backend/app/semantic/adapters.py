@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from typing import Iterable
-
 from app.schemas.presentation import Presentation, Slide, SlideType
-from app.semantic.catalog import LAYOUT_SPEC_REGISTRY, get_layout_spec
+from app.semantic.catalog import get_layout_spec
 from app.semantic.contracts import (
     LayoutSpec,
     MediaKind,
@@ -15,19 +13,8 @@ from app.semantic.contracts import (
     ThemeFonts,
     ThemeTokens,
 )
+from app.semantic.layout_selector import LayoutSelector
 from app.services.theme_registry import get_theme_tokens
-
-
-SLIDE_LAYOUT_MAP: dict[SlideType, str] = {
-    SlideType.TITLE_SLIDE: "title.centered",
-    SlideType.TITLE_BULLETS: "content.bullets",
-    SlideType.TITLE_BULLETS_IMAGE: "content.image_split",
-    SlideType.HERO_IMAGE: "hero.focus",
-    SlideType.COMPARISON: "comparison.split",
-    SlideType.TIMELINE: "timeline.stacked",
-    SlideType.STATISTICS: "statistics.grid",
-    SlideType.QUOTE: "quote.centered",
-}
 
 
 def _short_alt_text(slide: Slide) -> str | None:
@@ -70,9 +57,13 @@ def _slide_media(slide: Slide) -> list[SlideMediaRef]:
 
 
 def presentation_to_document(presentation: Presentation) -> PresentationDocument:
+    selector = LayoutSelector()
+    recommendations = selector.select_for_presentation(presentation)
+    recommended_by_slide_id = {item.slide_id: item for item in recommendations}
     semantic_slides = []
     for index, slide in enumerate(presentation.slides, start=1):
-        layout_name = SLIDE_LAYOUT_MAP.get(slide.type, "content.bullets")
+        recommendation = recommended_by_slide_id.get(slide.id)
+        layout_name = recommendation.selected_layout_id if recommendation else "content.bullets"
         semantic_slides.append(
             {
                 "id": slide.id,
@@ -96,7 +87,22 @@ def presentation_to_document(presentation: Presentation) -> PresentationDocument
                 "media": [media.model_dump(mode="json") for media in _slide_media(slide)],
             }
         )
-    return PresentationDocument(title=presentation.title, slides=semantic_slides)
+    return PresentationDocument(
+        title=presentation.title,
+        slides=semantic_slides,
+        metadata={
+            "layout_recommendations": [
+                {
+                    "slide_id": item.slide_id,
+                    "selected_layout_id": item.selected_layout_id,
+                    "score": item.score,
+                    "reason": item.reason,
+                    "alternatives": item.alternatives,
+                }
+                for item in recommendations
+            ]
+        },
+    )
 
 
 def build_theme_definition(theme_name: str) -> ThemeDefinition:

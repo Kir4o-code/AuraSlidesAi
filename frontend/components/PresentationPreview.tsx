@@ -82,7 +82,7 @@ export function PresentationPreview({
   }
 
   return (
-    <div className="surface-panel sharp-panel p-6">
+    <div className="surface-panel sharp-panel min-h-screen p-6 sm:p-8">
       <div className="flex flex-col gap-3 border-b border-white/10 pb-5 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-cyan-200">
