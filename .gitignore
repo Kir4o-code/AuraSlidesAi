@@ -1,15 +1,27 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
 .venv/
 venv/
 .env
 .env.local
 .env.example
 .DS_Store
+*.log
+chrome-test.*
+generated_test_image.png
+test_gemini_image.py
+imageresearch/
 
 backend/generated/**
 !backend/generated/.gitkeep
 
 frontend/.next/
 frontend/node_modules/
+frontend/out/
+frontend/coverage/
+frontend/tsconfig.tsbuildinfo

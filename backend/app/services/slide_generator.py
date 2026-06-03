@@ -10,13 +10,12 @@ from app.semantic.adapters import build_layout_specs, build_renderer_context, bu
 from app.semantic.contracts import LayoutedPresentationDocument, RendererTarget, ThemeDefinition
 from app.semantic.layout_engine import build_layouted_presentation
 from app.semantic.validators import validate_layout_spec, validate_presentation_document, validate_renderer_context, validate_theme_definition
+from app.services.exporters import build_presentation_exports as run_exporters
 
 
 APP_DIR = Path(__file__).resolve().parent.parent
 OUTPUT_DIR = APP_DIR.parent / "generated"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-DEBUG_DIR = OUTPUT_DIR / "debug"
-DEBUG_DIR.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger(__name__)
 
 

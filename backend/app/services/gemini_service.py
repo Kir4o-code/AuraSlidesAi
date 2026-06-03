@@ -32,6 +32,8 @@ class GeminiSettings(BaseSettings):
     gemini_api_key: str
     gemini_planning_model: str = "gemini-2.5-flash"
     gemini_image_model: str = "gemini-2.5-flash-image"
+    gemini_planning_timeout_seconds: int = 180
+    gemini_image_timeout_seconds: int = 180
     enable_image_generation: bool = Field(default=True, validation_alias="IMAGE_GEN_SWITCH")
 
 
@@ -215,6 +217,16 @@ def get_settings() -> GeminiSettings:
 def get_client() -> genai.Client:
     settings = get_settings()
     return genai.Client(api_key=settings.gemini_api_key)
+
+
+def _http_options(timeout_seconds: int | None) -> types.HttpOptions:
+    return types.HttpOptions(timeout=timeout_seconds * 1000 if timeout_seconds and timeout_seconds > 0 else None)
+
+
+async def _with_optional_timeout(awaitable: Any, timeout_seconds: int | None) -> Any:
+    if timeout_seconds and timeout_seconds > 0:
+        return await asyncio.wait_for(awaitable, timeout=timeout_seconds + 5)
+    return await awaitable
 
 
 def _normalize_bullets(values: list[str], limit: int, fallback: list[str]) -> list[str]:
@@ -508,6 +520,45 @@ def _normalize_slide_plan(slide: GeminiSlidePlan, presentation_title: str, index
     return slide
 
 
+def _fallback_title_from_purpose(purpose: str, presentation_title: str, index: int) -> str:
+    cleaned = re.sub(r"\s+", " ", purpose).strip(" -:;,.")
+    if not cleaned:
+        return _fallback_slide_title(presentation_title, index)
+    first_sentence = re.split(r"(?<=[.!?])\s+", cleaned, maxsplit=1)[0].strip(" -:;,.")
+    return (first_sentence or cleaned)[:100]
+
+
+def _fallback_plan_from_request(
+    prompt: str,
+    slide_count: int,
+    style: str,
+    slide_outline: list[GuidedSlideIntent] | None = None,
+) -> GeminiPresentationPlan:
+    title = _trim_text(prompt, 140) or "Generated presentation"
+    intents = list(slide_outline or [])
+    slides: list[GeminiSlidePlan] = []
+
+    for index in range(slide_count):
+        intent = intents[index] if index < len(intents) else None
+        purpose = intent.purpose if intent else _fallback_slide_title(title, index + 1)
+        slide_title = _fallback_title_from_purpose(purpose, title, index + 1)
+        slide_type = (intent.requested_type.value if intent and intent.requested_type else SlideType.TITLE_BULLETS.value)
+        slides.append(
+            GeminiSlidePlan(
+                type=slide_type,
+                title=slide_title,
+                subtitle=_trim_text(purpose, 220) if slide_type == SlideType.TITLE_SLIDE.value else None,
+                bullets=_fallback_bullets_for_slide(slide_title, title, slot=index),
+                image_prompt=_fallback_image_prompt(slide_title, title),
+                visual_mood=f"{style} presentation visual",
+                icon_intent=slide_title,
+                notes=purpose if purpose != slide_title else None,
+            )
+        )
+
+    return _normalize_plan(GeminiPresentationPlan(title=title, theme=style, slides=slides), slide_count, slide_outline)
+
+
 def _normalize_plan(
     plan: GeminiPresentationPlan,
     slide_count: int,
@@ -678,7 +729,6 @@ async def generate_presentation(
     slide_outline: list[GuidedSlideIntent] | None = None,
 ) -> Presentation:
     settings = get_settings()
-    client = get_client()
     logger.info(
         "Gemini planning request starting. model=%s slide_count=%s style=%s planning_mode=%s prompt_chars=%s",
         settings.gemini_planning_model,
@@ -688,19 +738,25 @@ async def generate_presentation(
         len(prompt),
     )
 
+    if planning_mode == PlanningMode.GUIDED and slide_outline:
+        logger.info("Guided planning using local slide outline. slide_count=%s", slide_count)
+        return _plan_to_presentation(_fallback_plan_from_request(prompt, slide_count, style, slide_outline))
+
+    client = get_client()
     outline_prompt = ""
     if planning_mode == PlanningMode.GUIDED:
         outline_prompt = f"""
 
 ORDERED SLIDE BRIEFS:
 Use this JSON array as a strict ordered plan. Expand each purpose into useful slide content.
+Treat each item as part of the same deck narrative. Avoid repeating points from earlier briefs and make each slide transition naturally from the previous one.
 If requested_type is null, choose the best allowed type for that slide.
 {json.dumps([item.model_dump(mode="json") for item in slide_outline or []], ensure_ascii=False)}
 """.rstrip()
 
     user_prompt = f"""
 Create a {slide_count}-slide presentation plan.
-Requirement: Generate EXACTLY {slide_count} slides. Do not stop until you have {slide_count} unique slides.
+Requirement: Generate EXACTLY {slide_count} unique slides.
 
 CONTENT RULES:
 - Maximum 3-4 bullets per slide.
@@ -727,27 +783,34 @@ Topic:
 Return JSON only.
 """.strip()
 
-    planning_error: Exception | None = None
-    response_text = ""
-    for attempt in range(2):
-        attempt_prompt = user_prompt if attempt == 0 else f"{user_prompt}\n\n{_planning_retry_instruction(slide_count)}"
-        try:
-            # Structured output keeps the MVP stable by asking Gemini for JSON that
-            # already matches the planning schema instead of free-form text.
-            response = await asyncio.to_thread(
+    try:
+        # Structured output keeps the MVP stable by asking Gemini for JSON that
+        # already matches the planning schema instead of free-form text.
+        response = await _with_optional_timeout(
+            asyncio.to_thread(
                 client.models.generate_content,
                 model=settings.gemini_planning_model,
-                contents=attempt_prompt,
+                contents=user_prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT,
                     response_mime_type="application/json",
                     response_json_schema=GEMINI_PLANNING_JSON_SCHEMA,
-                    temperature=0.3 if attempt == 0 else 0.15,
-                    max_output_tokens=8192 if attempt == 0 else 6144,
+                    temperature=0.3,
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+                    http_options=_http_options(settings.gemini_planning_timeout_seconds),
                 ),
-            )
-        except Exception as exc:
-            raise GeminiPlanningError(_provider_message(exc)) from exc
+            ),
+            settings.gemini_planning_timeout_seconds,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("Gemini planning timed out. Using local fallback plan.")
+        return _plan_to_presentation(_fallback_plan_from_request(prompt, slide_count, style, slide_outline))
+    except Exception as exc:
+        provider_message = _provider_message(exc)
+        if planning_mode == PlanningMode.GUIDED and re.search(r"\b(timeout|timed out|deadline|504|deadline_exceeded)\b", provider_message, re.IGNORECASE):
+            logger.warning("Gemini guided planning failed with timeout-like error. Using local fallback plan: %s", provider_message)
+            return _plan_to_presentation(_fallback_plan_from_request(prompt, slide_count, style, slide_outline))
+        raise GeminiPlanningError(provider_message) from exc
 
         try:
             response_text = _extract_json_text(response)
@@ -819,21 +882,30 @@ async def generate_slide_image(prompt: str) -> bytes:
     try:
         # The image model is isolated from planning so image failures do not
         # corrupt the slide JSON generation step.
-        response = await asyncio.to_thread(
-            client.models.generate_content,
-            model=settings.gemini_image_model,
-            contents=final_prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["TEXT", "IMAGE"],
-                image_config=types.ImageConfig(
-                    aspect_ratio="16:9",
-                    image_size="1K",
+        response = await _with_optional_timeout(
+            asyncio.to_thread(
+                client.models.generate_content,
+                model=settings.gemini_image_model,
+                contents=final_prompt,
+                config=types.GenerateContentConfig(
+                    response_modalities=["TEXT", "IMAGE"],
+                    image_config=types.ImageConfig(
+                        aspect_ratio="16:9",
+                        image_size="1K",
+                    ),
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+                    http_options=_http_options(settings.gemini_image_timeout_seconds),
                 ),
             ),
+            settings.gemini_image_timeout_seconds,
         )
         return _extract_image_bytes(response)
     except GeminiImageGenerationError:
         raise
+    except asyncio.TimeoutError as exc:
+        raise GeminiImageGenerationError(
+            f"Gemini image generation timed out after {settings.gemini_image_timeout_seconds} seconds."
+        ) from exc
     except Exception as exc:
         raise GeminiImageGenerationError(_provider_message(exc)) from exc
 
