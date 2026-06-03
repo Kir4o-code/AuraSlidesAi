@@ -1,0 +1,112 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  min-height: 100vh;
+  background: #050505;
+  color: #f8fafc;
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.surface-panel {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #0b0b0d;
+  box-shadow: 0 22px 80px rgba(0, 0, 0, 0.42);
+}
+
+.sharp-panel {
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+}
+
+.sharp-control {
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+}
+
+.interactive-outline {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--control-bg, #0b0b0d), var(--control-bg, #0b0b0d)) padding-box,
+    linear-gradient(120deg, rgba(34, 211, 238, 0.82), rgba(168, 85, 247, 0.78), rgba(244, 63, 94, 0.72)) border-box;
+}
+
+.button-press {
+  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+
+.button-press:active {
+  transform: scale(0.965);
+}
+
+.slide-enter {
+  animation: slide-enter 280ms ease-out;
+}
+
+::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+@keyframes slide-enter {
+  from {
+    opacity: 0.35;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.export-page {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.export-page--single {
+  width: 1280px;
+  height: 720px;
+  overflow: hidden;
+}
+
+.export-page--deck {
+  width: 1280px;
+}
+
+@page {
+  size: 1280px 720px;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body {
+    width: 1280px;
+    margin: 0;
+    background: #ffffff;
+  }
+
+  .export-page {
+    width: 1280px;
+  }
+}
+
