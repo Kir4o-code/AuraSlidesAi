@@ -1,27 +1,90 @@
+# Python
 __pycache__/
 *.py[cod]
+*$py.class
+
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 htmlcov/
 .coverage
+coverage.xml
+
 .venv/
 venv/
+env/
+ENV/
+
 .env
-.env.local
-.env.example
+.env.*
+!.env.example
+
+# System / logs
 .DS_Store
+Thumbs.db
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test / temp files
 chrome-test.*
 generated_test_image.png
 test_gemini_image.py
+
+# Backend generated files
+src/backend/generated/**
+!src/backend/generated/.gitkeep
+
+# Image research / generated assets
 imageresearch/
 
-backend/generated/**
-!backend/generated/.gitkeep
+# Node / Next.js
+node_modules/
+**/node_modules/
 
-frontend/.next/
-frontend/node_modules/
-frontend/out/
-frontend/coverage/
-frontend/tsconfig.tsbuildinfo
+.next/
+**/.next/
+
+out/
+**/out/
+
+dist/
+**/dist/
+
+build/
+**/build/
+
+coverage/
+**/coverage/
+
+.cache/
+**/.cache/
+
+.turbo/
+**/.turbo/
+
+.vercel/
+**/.vercel/
+
+# TypeScript / Next.js
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+next-env.d.ts
+
+# Maps / compiled JS from packages
+*.js.map
+
+# Package manager folders
+.pnpm-store/
+.yarn/
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# Lock files - keep these usually tracked, so DO NOT ignore them:
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml

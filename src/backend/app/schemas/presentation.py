@@ -1,0 +1,173 @@
+from enum import Enum
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from app.semantic.contracts import LayoutedPresentationDocument
+
+
+class SlideType(str, Enum):
+    TITLE_SLIDE = "title_slide"
+    TITLE_BULLETS = "title_bullets"
+    TITLE_BULLETS_IMAGE = "title_bullets_image"
+    HERO_IMAGE = "hero_image"
+    COMPARISON = "comparison"
+    TIMELINE = "timeline"
+    STATISTICS = "statistics"
+    QUOTE = "quote"
+
+
+class ThemeName(str, Enum):
+    CLEAN_SCHOOL = "clean_school"
+    MODERN_DARK_TECH = "modern_dark_tech"
+    ACADEMIC_FORMAL = "academic_formal"
+    STARTUP_PITCH = "startup_pitch"
+    PHOTO_EDITORIAL = "photo_editorial"
+    MINIMAL_CORPORATE = "minimal_corporate"
+    CREATIVE_GRADIENT = "creative_gradient"
+    DATA_REPORT = "data_report"
+    NATURE_ORGANIC = "nature_organic"
+    LUXURY_EDITORIAL = "luxury_editorial"
+    PLAYFUL_LEARNING = "playful_learning"
+    MONOCHROME_BOLD = "monochrome_bold"
+    MODERN_DARK = "modern_dark"
+    MODERN_LIGHT = "modern_light"
+    EDITORIAL = "editorial"
+    CORPORATE = "corporate"
+    PLAYFUL = "playful"
+
+
+class PlanningMode(str, Enum):
+    AUTOMATIC = "automatic"
+    GUIDED = "guided"
+
+
+class GuidedSlideIntent(BaseModel):
+    purpose: str = Field(min_length=1, max_length=500)
+    requested_type: SlideType | None = None
+
+
+class ImageSource(str, Enum):
+    GEMINI = "gemini"
+    UNSPLASH = "unsplash"
+
+
+class ImageClass(str, Enum):
+    ICON = "icon"
+    DIAGRAM = "diagram"
+    ILLUSTRATION = "illustration"
+    PHOTO = "photo"
+
+
+class ResolvedImageAsset(BaseModel):
+    local_path: str
+    public_url: str
+    source: str
+    source_url: str
+    image_url: str
+    author: str | None = None
+    license_name: str
+    width: int | None = None
+    height: int | None = None
+    clip_score: float | None = None
+    final_score: float | None = None
+
+
+class TimelineStep(BaseModel):
+    label: str = Field(min_length=1, max_length=120)
+    detail: str | None = Field(default=None, max_length=240)
+
+
+class StatisticItem(BaseModel):
+    label: str = Field(min_length=1, max_length=80)
+    value: str = Field(min_length=1, max_length=40)
+    detail: str | None = Field(default=None, max_length=160)
+
+
+class Slide(BaseModel):
+    id: str = Field(min_length=1, max_length=40)
+    type: SlideType
+    title: str | None = Field(default=None, max_length=140)
+    subtitle: str | None = Field(default=None, max_length=220)
+    bullets: list[str] = Field(default_factory=list, max_length=6)
+    image_prompt: str | None = Field(default=None, max_length=500)
+    image_class: ImageClass | None = None
+    visual_mood: str | None = Field(default=None, max_length=120)
+    icon_intent: str | None = Field(default=None, max_length=120)
+    notes: str | None = Field(default=None, max_length=500)
+    left_title: str | None = Field(default=None, max_length=120)
+    right_title: str | None = Field(default=None, max_length=120)
+    left_bullets: list[str] = Field(default_factory=list, max_length=6)
+    right_bullets: list[str] = Field(default_factory=list, max_length=6)
+    timeline: list[TimelineStep] = Field(default_factory=list)
+    statistics: list[StatisticItem] = Field(default_factory=list)
+    quote: str | None = Field(default=None, max_length=400)
+    attribution: str | None = Field(default=None, max_length=250)
+    resolved_image: ResolvedImageAsset | None = None
+
+    @model_validator(mode="after")
+    def validate_slide_payload(self) -> "Slide":
+        rules = {
+            SlideType.TITLE_SLIDE: (self.title, "Title slides need a title."),
+            SlideType.TITLE_BULLETS: (
+                self.title and len(self.bullets) >= 2,
+                "Bullet slides need a title and at least two bullets.",
+            ),
+            SlideType.TITLE_BULLETS_IMAGE: (
+                self.title and len(self.bullets) >= 2 and self.image_prompt,
+                "Image bullet slides need a title, bullets, and an image prompt.",
+            ),
+            SlideType.HERO_IMAGE: (
+                self.title and self.image_prompt,
+                "Hero image slides need a title and an image prompt.",
+            ),
+            SlideType.COMPARISON: (
+                self.title and self.left_title and self.right_title and self.left_bullets and self.right_bullets,
+                "Comparison slides need both sides populated.",
+            ),
+            SlideType.TIMELINE: (
+                self.title and len(self.timeline) >= 2,
+                "Timeline slides need at least two milestones.",
+            ),
+            SlideType.STATISTICS: (self.title and self.statistics, "Statistics slides need at least one statistic."),
+            SlideType.QUOTE: (self.quote, "Quote slides need quote text."),
+        }
+        valid, message = rules[self.type]
+        if not valid:
+            raise ValueError(message)
+        return self
+
+
+class Presentation(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    theme: ThemeName = Field(default=ThemeName.MODERN_DARK)
+    slides: list[Slide] = Field(min_length=3, max_length=12)
+
+
+class GeneratePresentationRequest(BaseModel):
+    prompt: str = Field(min_length=5, max_length=4000)
+    slide_count: int = Field(default=5, ge=3, le=10)
+    style: str = Field(default="modern", min_length=1, max_length=40)
+    template: ThemeName | None = None
+    image_source: ImageSource = ImageSource.GEMINI
+    planning_mode: PlanningMode = PlanningMode.AUTOMATIC
+    slide_outline: list[GuidedSlideIntent] | None = Field(default=None, min_length=3, max_length=10)
+
+    @field_validator("image_source", mode="before")
+    @classmethod
+    def map_legacy_image_source(cls, value: object) -> object:
+        if value == "image_research":
+            return ImageSource.UNSPLASH
+        return value
+
+    @model_validator(mode="after")
+    def validate_guided_outline(self) -> "GeneratePresentationRequest":
+        if self.planning_mode == PlanningMode.GUIDED and not self.slide_outline:
+            raise ValueError("Guided planning requires a slide outline.")
+        return self
+
+
+class GeneratePresentationResponse(BaseModel):
+    presentation: Presentation
+    layouted_presentation: LayoutedPresentationDocument | None = None
+    pptx_url: str
+    pdf_url: str | None

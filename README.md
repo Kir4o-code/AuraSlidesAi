@@ -1,88 +1,112 @@
-# AuraSlidesAi MVP
+# AuraSlides AI
 
-Structured presentation generator with a Next.js frontend and a FastAPI backend. Gemini 2.5 Flash plans the deck as structured content JSON, the frontend slide registry and theme engine render the preview, and the backend exports the same platform-independent presentation data to PDF.
+AuraSlides AI е приложение за генериране на презентации. FastAPI backend-ът
+използва Gemini за създаване на структурирано съдържание и изображения, а
+Next.js frontend-ът визуализира слайдовете и позволява export към PPTX и PDF.
 
-## Stack
-
-- Frontend: Next.js + Tailwind CSS + slide registry preview
-- Backend: FastAPI + structured JSON export
-- AI planning: Gemini 2.5 Flash
-- AI images: Nano Banana (`gemini-2.5-flash-image`)
-- Theme registry: deterministic design tokens shared by rendering paths
-- Export: PPTX first, optional PDF conversion
-
-## Project Structure
+## Структура
 
 ```text
-backend/
-frontend/
+src/
+  backend/       # FastAPI приложение и генерирани файлове
+  frontend/      # Next.js приложение
+tests/           # Python unit tests с pytest
+pyproject.toml   # pytest конфигурация
+requirements.txt
+requirements-dev.txt
+.gitignore
+README.md
 ```
 
-## Backend Setup
+## Изисквания
 
-1. Create a Python 3.11+ virtual environment.
-2. Install dependencies:
+- Python 3.11 - 3.13 (препоръчително Python 3.12)
+- Node.js 20+
+- npm
+- Gemini API ключ
+
+## Инсталация
+
+Създайте и активирайте Python virtual environment от корена на проекта:
 
 ```bash
-cd backend
-pip install -r requirements.txt
+py -3.12 -m venv .venv
 ```
 
-3. Copy the environment file and add your Gemini API key:
+Windows PowerShell:
 
-```bash
-cp .env.example .env
+```powershell
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements-dev.txt
 ```
 
-4. Start the API:
+Инсталирайте frontend библиотеките:
 
 ```bash
+cd src/frontend
+npm install
+cd ../..
+```
+
+Създайте `src/backend/.env` и добавете необходимите настройки, включително:
+
+```dotenv
+GEMINI_API_KEY=your_api_key
+```
+
+По желание копирайте `src/frontend/.env.local.example` като
+`src/frontend/.env.local`, за да зададете различен backend URL.
+
+## Стартиране
+
+Backend:
+
+```bash
+cd src/backend
 uvicorn app.main:app --reload --port 8000
 ```
 
-Backend endpoints:
-
-- `POST /presentations/generate`
-- `GET /health`
-- `GET /generated/<file>.pdf`
-- `GET /generated/optimized_images/<file>.jpg`
-
-## Frontend Setup
-
-1. Install dependencies:
+Frontend, в отделен terminal:
 
 ```bash
-cd frontend
-npm install
-```
-
-2. Optionally configure the backend URL:
-
-```bash
-cp .env.local.example .env.local
-```
-
-3. Start the frontend:
-
-```bash
+cd src/frontend
 npm run dev
 ```
 
-The frontend runs on `http://localhost:3000` by default and targets `http://localhost:8000`.
+Frontend-ът е достъпен на `http://localhost:3000`, а API-то на
+`http://localhost:8000`. Основните API endpoints са:
 
-## Gemini Pipeline
+- `GET /health`
+- `POST /presentations/generate`
+- `GET /generated/<file>`
 
-- `gemini-2.5-flash` generates structured presentation JSON.
-- The backend validates the AI JSON with Pydantic and normalizes it into the platform-independent slide schema.
-- The frontend uses a slide registry and theme registry to render the live preview from the returned JSON.
-- Image-backed slides are sent to Nano Banana (`gemini-2.5-flash-image`) for grounded presentation visuals.
-- Generated images are optimized and stored in `backend/generated/optimized_images/`.
-- The cache key is based on slide content and image prompt, so images are reused unless the slide changes.
-- The final PDF and PPTX are exported from the same React/Tailwind slide renderer used by the preview. Keep the frontend running at `FRONTEND_ORIGIN` while generating downloads.
+Генерираните изображения, PPTX и PDF файлове се пазят в
+`src/backend/generated/`.
 
-## Notes
+## Тестове
 
-- PDFs are stored locally in `backend/generated/`.
-- PPTX exports are image-based slide captures so downloaded decks match the React preview.
-- Generated images are stored locally in `backend/generated/optimized_images/`.
-- The schema is built to support future features like saved presentations, async jobs, editor workflows, and richer asset processing.
+От корена на проекта:
+
+```bash
+pytest
+```
+
+Тестове с coverage отчет:
+
+```bash
+pytest --cov=app --cov-report=term-missing
+```
+
+Статична проверка и форматиране на Python кода:
+
+```bash
+ruff check src/backend/app tests
+ruff format --check src/backend/app tests
+```
+
+Frontend проверка:
+
+```bash
+cd src/frontend
+npm run build
+```
