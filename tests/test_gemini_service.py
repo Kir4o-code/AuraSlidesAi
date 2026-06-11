@@ -21,6 +21,7 @@ from app.services.gemini_service import (
     _heading_from_first_bullet,
     _http_options,
     _infer_comparison_title,
+    _is_timeout_like_error,
     _looks_generic_title,
     _looks_truncated_json,
     _normalize_attribution,
@@ -56,6 +57,12 @@ def test_provider_message_is_user_friendly(message: str, expected: str) -> None:
 def test_http_options_converts_seconds_to_milliseconds() -> None:
     assert _http_options(2).timeout == 2000
     assert _http_options(0).timeout is None
+    assert _http_options(2).retry_options.attempts == 1
+
+
+@pytest.mark.parametrize("message", ["request timeout", "504 DEADLINE_EXCEEDED", "operation timed out"])
+def test_timeout_like_error_detection(message: str) -> None:
+    assert _is_timeout_like_error(message)
 
 
 def test_text_and_bullet_normalizers() -> None:

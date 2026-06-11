@@ -93,6 +93,19 @@ def test_layout_pipeline_renders_every_slide_type(full_presentation: Presentatio
             assert element.y + element.height <= slide.canvas_height
 
 
+def test_statistics_panel_children_stay_inside_cards(full_presentation: Presentation) -> None:
+    document = presentation_to_document(full_presentation)
+    layouted = build_layouted_presentation(document)
+    statistics_slide = next(slide for slide in layouted.slides if slide.layout_name.startswith("statistics."))
+
+    for panel in (element for element in statistics_slide.elements if element.kind.value == "panel"):
+        for child in panel.children:
+            assert child.x >= 0
+            assert child.y >= 0
+            assert child.x + child.width <= panel.width
+            assert child.y + child.height <= panel.height
+
+
 def test_build_theme_definition_is_renderer_neutral() -> None:
     theme = build_theme_definition("modern")
     assert theme.id == "modern_dark_tech"

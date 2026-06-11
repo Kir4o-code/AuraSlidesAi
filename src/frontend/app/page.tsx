@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { FiLayers, FiZap } from "react-icons/fi";
 
 import { PresentationPreview } from "@/components/PresentationPreview";
@@ -11,7 +11,7 @@ import {
   ProgressState,
   createInitialProgress,
   generatePresentation,
-  getProgressSnapshot,
+  getProgressForStage,
 } from "@/lib/api";
 
 
@@ -20,29 +20,10 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState<ProgressState>(createInitialProgress());
-  const requestStartedAtRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (!isLoading) {
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      if (requestStartedAtRef.current === null) {
-        return;
-      }
-      const elapsed = Date.now() - requestStartedAtRef.current;
-      setProgress(getProgressSnapshot(elapsed));
-    }, 250);
-
-    return () => window.clearInterval(interval);
-  }, [isLoading]);
-
   async function handleGenerate(payload: GeneratePresentationPayload) {
     setIsLoading(true);
     setError(null);
     setResult(null);
-    requestStartedAtRef.current = Date.now();
     setProgress({
       ...createInitialProgress(),
       value: 6,
@@ -50,7 +31,9 @@ export default function HomePage() {
     });
 
     try {
-      const response = await generatePresentation(payload);
+      const response = await generatePresentation(payload, (stage) => {
+        setProgress(getProgressForStage(stage));
+      });
       setProgress({
         ...createInitialProgress(),
         value: 100,
@@ -64,7 +47,6 @@ export default function HomePage() {
       setError(message);
     } finally {
       setIsLoading(false);
-      requestStartedAtRef.current = null;
     }
   }
 

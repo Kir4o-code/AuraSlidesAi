@@ -1191,7 +1191,7 @@ def _layout_statistics_slide(slide: Slide, spacing_scale: float, typography_scal
     columns = 3 if len(cards) > 2 else max(1, len(cards))
     grid_gap = _gap(GRID_GAP, spacing_scale, 16)
     card_width = int((width - (grid_gap * (columns - 1))) / columns)
-    card_height = 180
+    card_height = 208
     x0 = MARGIN_X
     y0 = max(title_y, 192)
     for index, stat in enumerate(cards):
@@ -1199,64 +1199,73 @@ def _layout_statistics_slide(slide: Slide, spacing_scale: float, typography_scal
         row = index // columns
         x = x0 + (col * (card_width + grid_gap))
         y = y0 + (row * (card_height + grid_gap))
-        value_font = _scale_type(36, typography_scale, 28)
+        inner_width = card_width - (PANEL_PADDING * 2)
+        inner_height = card_height - (PANEL_PADDING * 2)
+        value_font = _scale_type(36, typography_scale, 26)
         label_font = _scale_type(16, typography_scale, 13)
         detail_font = _scale_type(15, typography_scale, 12)
         child_elements: list[LayoutElement] = []
         stat_value = _item_field(stat, "value", "")
         stat_label = _item_field(stat, "label", "")
         stat_detail = _item_field(stat, "detail")
-        value_h, _, _ = _text_height(stat_value, card_width - 40, value_font, min_height=44)
-        label_h, _, _ = _text_height(stat_label, card_width - 40, label_font, min_height=24)
+        value_font, value_h = _fit_text_block(
+            stat_value, inner_width, value_font, min_font_size=22, max_height=54, min_height=38
+        )
+        label_gap = _gap(8, spacing_scale, 6)
+        detail_gap = _gap(10, spacing_scale, 8)
+        detail_budget = 58 if stat_detail else 0
+        label_budget = max(28, inner_height - value_h - label_gap - detail_budget - (detail_gap if stat_detail else 0))
+        label_font, label_h = _fit_text_block(
+            stat_label, inner_width, label_font, min_font_size=11, max_height=label_budget, min_height=22
+        )
         child_elements.append(
             _text_element(
                 element_id=f"{slide.id}_stat_{index + 1}_value",
                 region=f"stat.{index + 1}.value",
                 x=0,
                 y=0,
-                width=card_width - 40,
+                width=inner_width,
                 text=stat_value,
                 font_size=value_font,
                 align=Alignment.CENTER,
                 min_height=value_h,
-                max_height=58,
-                min_font_size=24,
+                max_height=54,
+                min_font_size=22,
                 note="stat value",
             )
         )
-        label_gap = _gap(10, spacing_scale, 8)
         child_elements.append(
             _text_element(
                 element_id=f"{slide.id}_stat_{index + 1}_label",
                 region=f"stat.{index + 1}.label",
                 x=0,
                 y=value_h + label_gap,
-                width=card_width - 40,
+                width=inner_width,
                 text=stat_label,
                 font_size=label_font,
                 align=Alignment.CENTER,
                 min_height=label_h,
-                max_height=42,
-                min_font_size=12,
+                max_height=label_budget,
+                min_font_size=11,
                 note="stat label",
             )
         )
         if stat_detail:
-            detail_y = value_h + label_h + _gap(20, spacing_scale, 14)
-            detail_h, _, _ = _text_height(stat_detail, card_width - 40, detail_font, min_height=22)
+            detail_y = value_h + label_gap + label_h + detail_gap
+            detail_height = max(22, inner_height - detail_y)
             child_elements.append(
                 _text_element(
                     element_id=f"{slide.id}_stat_{index + 1}_detail",
                     region=f"stat.{index + 1}.detail",
                     x=0,
                     y=detail_y,
-                    width=card_width - 40,
+                    width=inner_width,
                     text=stat_detail,
                     font_size=detail_font,
                     align=Alignment.CENTER,
-                    min_height=detail_h,
-                    max_height=56,
-                    min_font_size=11,
+                    min_height=22,
+                    max_height=detail_height,
+                    min_font_size=10,
                     note="stat detail",
                 )
             )
@@ -1384,7 +1393,7 @@ def _layout_statistics_featured_slide(
     grid_x = MARGIN_X + hero_width + 28
     grid_width = CANVAS_WIDTH - grid_x - MARGIN_X
     card_width = int((grid_width - 24) / 2)
-    card_height = 176
+    card_height = 196
     for index, stat in enumerate(secondary[:4]):
         col = index % 2
         row = index // 2
@@ -1393,50 +1402,70 @@ def _layout_statistics_featured_slide(
         value = _item_field(stat, "value", "")
         label = _item_field(stat, "label", "")
         detail = _item_field(stat, "detail")
+        inner_width = card_width - (PANEL_PADDING * 2)
+        inner_height = card_height - (PANEL_PADDING * 2)
+        value_font, value_h = _fit_text_block(
+            value,
+            inner_width,
+            _scale_type(_fit_font_size(28, value, 18, 28), typography_scale, 18),
+            min_font_size=16,
+            max_height=48,
+            min_height=32,
+        )
+        label_y = value_h + 8
+        label_font, label_h = _fit_text_block(
+            label,
+            inner_width,
+            _scale_type(15, typography_scale, 12),
+            min_font_size=11,
+            max_height=38,
+            min_height=20,
+        )
         child_elements = [
             _text_element(
                 element_id=f"{slide.id}_stat_{index + 2}_value",
                 region=f"stat.{index + 2}.value",
                 x=0,
                 y=0,
-                width=card_width - 40,
+                width=inner_width,
                 text=value,
-                font_size=_scale_type(_fit_font_size(28, value, 18, 28), typography_scale, 18),
+                font_size=value_font,
                 align=Alignment.START,
-                min_height=38,
-                max_height=84,
-                min_font_size=18,
+                min_height=value_h,
+                max_height=48,
+                min_font_size=16,
                 note="stat value",
             ),
             _text_element(
                 element_id=f"{slide.id}_stat_{index + 2}_label",
                 region=f"stat.{index + 2}.label",
                 x=0,
-                y=66,
-                width=card_width - 40,
+                y=label_y,
+                width=inner_width,
                 text=label,
-                font_size=_scale_type(15, typography_scale, 12),
+                font_size=label_font,
                 align=Alignment.START,
-                min_height=22,
-                max_height=50,
-                min_font_size=12,
+                min_height=label_h,
+                max_height=38,
+                min_font_size=11,
                 note="stat label",
             ),
         ]
         if detail:
+            detail_y = label_y + label_h + 8
             child_elements.append(
                 _text_element(
                     element_id=f"{slide.id}_stat_{index + 2}_detail",
                     region=f"stat.{index + 2}.detail",
                     x=0,
-                    y=108,
-                    width=card_width - 40,
+                    y=detail_y,
+                    width=inner_width,
                     text=detail,
                     font_size=_scale_type(14, typography_scale, 12),
                     align=Alignment.START,
                     min_height=22,
-                    max_height=48,
-                    min_font_size=11,
+                    max_height=max(22, inner_height - detail_y),
+                    min_font_size=10,
                     note="stat detail",
                 )
             )

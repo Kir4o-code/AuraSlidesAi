@@ -7,6 +7,7 @@ import re
 from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 from dotenv import load_dotenv
@@ -31,7 +32,7 @@ class GeminiSettings(BaseSettings):
     gemini_api_key: str
     gemini_planning_model: str = "gemini-2.5-flash"
     gemini_image_model: str = "gemini-2.5-flash-image"
-    gemini_planning_timeout_seconds: int = 180
+    gemini_planning_timeout_seconds: int = 45
     gemini_image_timeout_seconds: int = 180
     enable_image_generation: bool = Field(default=True, validation_alias="IMAGE_GEN_SWITCH")
 
@@ -227,13 +228,20 @@ def get_client() -> genai.Client:
 
 
 def _http_options(timeout_seconds: int | None) -> types.HttpOptions:
-    return types.HttpOptions(timeout=timeout_seconds * 1000 if timeout_seconds and timeout_seconds > 0 else None)
+    return types.HttpOptions(
+        timeout=timeout_seconds * 1000 if timeout_seconds and timeout_seconds > 0 else None,
+        retry_options=types.HttpRetryOptions(attempts=1),
+    )
 
 
 async def _with_optional_timeout(awaitable: Any, timeout_seconds: int | None) -> Any:
     if timeout_seconds and timeout_seconds > 0:
         return await asyncio.wait_for(awaitable, timeout=timeout_seconds + 5)
     return await awaitable
+
+
+def _is_timeout_like_error(message: str) -> bool:
+    return bool(re.search(r"\b(timeout|timed out|deadline|504|deadline_exceeded)\b", message, re.IGNORECASE))
 
 
 def _normalize_bullets(values: list[str], limit: int, fallback: list[str]) -> list[str]:
@@ -1033,6 +1041,7 @@ Return JSON only.
     plan: GeminiPresentationPlan | None = None
     for attempt in range(2):
         attempt_prompt = user_prompt if attempt == 0 else f"{user_prompt}\n\n{_planning_retry_instruction(slide_count)}"
+        attempt_started_at = perf_counter()
         try:
             # Structured output keeps the MVP stable by asking Gemini for JSON that
             # already matches the planning schema instead of free-form text.
@@ -1053,15 +1062,17 @@ Return JSON only.
                 settings.gemini_planning_timeout_seconds,
             )
         except asyncio.TimeoutError:
-            logger.warning("Gemini planning timed out. Using local fallback plan.")
+            logger.warning(
+                "Gemini planning timed out after %.2fs. Using local fallback plan.",
+                perf_counter() - attempt_started_at,
+            )
             return _plan_to_presentation(_fallback_plan_from_request(prompt, slide_count, style, slide_outline))
         except Exception as exc:
             provider_message = _provider_message(exc)
-            if planning_mode == PlanningMode.GUIDED and re.search(
-                r"\b(timeout|timed out|deadline|504|deadline_exceeded)\b", provider_message, re.IGNORECASE
-            ):
+            if _is_timeout_like_error(provider_message):
                 logger.warning(
-                    "Gemini guided planning failed with timeout-like error. Using local fallback plan: %s",
+                    "Gemini planning failed with timeout-like error after %.2fs. Using local fallback plan: %s",
+                    perf_counter() - attempt_started_at,
                     provider_message,
                 )
                 return _plan_to_presentation(_fallback_plan_from_request(prompt, slide_count, style, slide_outline))
@@ -1070,6 +1081,12 @@ Return JSON only.
         try:
             response_text = _extract_json_text(response)
             plan = GeminiPresentationPlan.model_validate_json(response_text)
+            logger.info(
+                "Gemini planning response received. attempt=%s duration=%.2fs response_chars=%s",
+                attempt + 1,
+                perf_counter() - attempt_started_at,
+                len(response_text),
+            )
             break
         except (ValidationError, json.JSONDecodeError, GeminiPlanningError) as exc:
             planning_error = exc

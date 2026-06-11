@@ -169,6 +169,8 @@ export interface ProgressState {
   stages: string[];
 }
 
+export type GenerationStage = "planning" | "validation" | "images" | "export";
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -184,11 +186,12 @@ export function resolveApiAssetUrl(url: string | null | undefined): string | und
 
 export async function generatePresentation(
   payload: GeneratePresentationPayload,
+  onStage?: (stage: GenerationStage) => void,
 ): Promise<GeneratePresentationResponse> {
   let response: Response;
 
   try {
-    response = await fetch(`${API_BASE_URL}/presentations/generate`, {
+    response = await fetch(`${API_BASE_URL}/presentations/generate-stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -204,14 +207,46 @@ export async function generatePresentation(
     throw error;
   }
 
-  if (!response.ok) {
+  if (!response.ok || !response.body) {
     const errorBody = (await response.json().catch(() => null)) as
       | { detail?: string }
       | null;
     throw new Error(errorBody?.detail ?? "Failed to generate presentation.");
   }
 
-  return (await response.json()) as GeneratePresentationResponse;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (!line.trim()) {
+        continue;
+      }
+      const event = JSON.parse(line) as
+        | { type: "progress"; stage: GenerationStage }
+        | { type: "result"; data: GeneratePresentationResponse }
+        | { type: "error"; detail: string };
+      if (event.type === "progress") {
+        onStage?.(event.stage);
+      } else if (event.type === "result") {
+        return event.data;
+      } else {
+        throw new Error(event.detail);
+      }
+    }
+
+    if (done) {
+      break;
+    }
+  }
+
+  throw new Error("The backend stream ended before returning a presentation.");
 }
 
 const PROGRESS_STAGES = [
@@ -231,36 +266,18 @@ export function createInitialProgress(): ProgressState {
   };
 }
 
-export function getProgressSnapshot(elapsedMs: number): ProgressState {
-  if (elapsedMs <= 0) {
-    return createInitialProgress();
-  }
-
-  const timeline = [
-    { maxMs: 500, stageIndex: 0 },
-    { maxMs: 3500, stageIndex: 1 },
-    { maxMs: 5000, stageIndex: 2 },
-    { maxMs: 7000, stageIndex: 3 },
-    { maxMs: Number.POSITIVE_INFINITY, stageIndex: 4 },
-  ];
-
-  const active = timeline.find((item) => elapsedMs <= item.maxMs) ?? timeline[timeline.length - 1];
-  const stage = PROGRESS_STAGES[active.stageIndex];
-  const previousValue = active.stageIndex === 0 ? 0 : PROGRESS_STAGES[active.stageIndex - 1].value;
-  const stageStartMs = active.stageIndex === 0 ? 0 : timeline[active.stageIndex - 1].maxMs;
-  const stageEndMs = active.maxMs === Number.POSITIVE_INFINITY ? stageStartMs + 4000 : active.maxMs;
-  const stageDuration = Math.max(stageEndMs - stageStartMs, 1);
-  const stageElapsed = Math.max(elapsedMs - stageStartMs, 0);
-  const stageProgress = Math.min(stageElapsed / stageDuration, 1);
-  const value = Math.min(
-    Math.round(previousValue + (stage.value - previousValue) * stageProgress),
-    95,
-  );
-
+export function getProgressForStage(stage: GenerationStage): ProgressState {
+  const stageIndex = {
+    planning: 1,
+    validation: 2,
+    images: 3,
+    export: 4,
+  }[stage];
+  const current = PROGRESS_STAGES[stageIndex];
   return {
-    value,
-    label: stage.label,
-    stageIndex: active.stageIndex,
+    value: current.value,
+    label: current.label,
+    stageIndex,
     stages: PROGRESS_STAGES.map((item) => item.label),
   };
 }

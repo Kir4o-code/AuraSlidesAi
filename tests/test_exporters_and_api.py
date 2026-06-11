@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from typing import Any
 
@@ -105,6 +106,46 @@ def test_generate_route_with_mocked_services(
     )
     assert response.status_code == 200
     assert response.json()["pptx_url"].endswith("/generated/deck.pptx")
+
+
+def test_generate_stream_reports_real_stage_order(
+    sample_presentation: Presentation,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_generate(**kwargs: Any) -> Presentation:
+        return sample_presentation
+
+    async def fake_enrich(presentation: Presentation, image_source: ImageSource) -> Presentation:
+        return presentation
+
+    monkeypatch.setattr(presentation_routes, "generate_presentation", fake_generate)
+    monkeypatch.setattr(presentation_routes, "enrich_presentation_images", fake_enrich)
+    monkeypatch.setattr(presentation_routes, "get_settings", lambda: SimpleNamespace(enable_image_generation=True))
+    monkeypatch.setattr(
+        presentation_routes,
+        "prepare_export_bundle",
+        lambda presentation: (
+            build_layouted_presentation(presentation_to_document(presentation)),
+            build_theme_definition(presentation.theme),
+        ),
+    )
+    monkeypatch.setattr(
+        presentation_routes, "build_presentation_exports", lambda presentation: ("deck.pptx", "deck.pdf")
+    )
+
+    response = TestClient(app).post(
+        "/presentations/generate-stream",
+        json=GeneratePresentationRequest(prompt="Create a useful presentation").model_dump(mode="json"),
+    )
+    events = [json.loads(line) for line in response.text.splitlines()]
+
+    assert [event["stage"] for event in events if event["type"] == "progress"] == [
+        "planning",
+        "validation",
+        "images",
+        "export",
+    ]
+    assert events[-1]["type"] == "result"
 
 
 def test_generate_route_maps_validation_error(monkeypatch: pytest.MonkeyPatch) -> None:
