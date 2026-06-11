@@ -1,3 +1,5 @@
+# Роля на модула: Геометричният център на pipeline-а. Работи като чертожник: превръща съдържанието в точни позиции и размери преди renderer-ът да рисува.
+# Чети коментарите като обяснение на причината за кода и връзката му със следващия слой, а не като буквален превод на Python синтаксиса.
 from __future__ import annotations
 
 import math
@@ -25,47 +27,100 @@ PANEL_PADDING = 24
 
 
 def _scale_spacing(value: int | float, spacing_scale: float) -> int:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `scale_spacing` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `value` (int | float), `spacing_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `int`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     return max(0, int(round(value * spacing_scale)))
 
 
 def _gap(base: int | float, spacing_scale: float, minimum: int | float | None = None) -> int:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `gap` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `base` (int | float), `spacing_scale` (float), `minimum` (int | float | None); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_scale_spacing`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `int`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
+    # `scaled` пази резултата от `_scale_spacing`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     scaled = _scale_spacing(base, spacing_scale)
+    # Това условие е decision point: `minimum is None`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`scaled`) и прескачаме ненужната останала работа.
     if minimum is None:
         return scaled
     return max(int(round(minimum)), scaled)
 
 
 def _scale_type(value: int, typography_scale: float, minimum: int | None = None) -> int:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `scale_type` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `value` (int), `typography_scale` (float), `minimum` (int | None); имената показват каква част от контекста е собственост на тази стъпка.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `int`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     scaled = int(round(value * typography_scale))
+    # Това условие е decision point: `minimum is not None`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`max(minimum, scaled)`) и прескачаме ненужната останала работа.
     if minimum is not None:
         return max(minimum, scaled)
     return scaled
 
 
 def _fit_font_size(base: int, text: str, minimum: int, maximum: int) -> int:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `fit_font_size` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `base` (int), `text` (str), `minimum` (int), `maximum` (int); имената показват каква част от контекста е собственост на тази стъпка.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `int`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
+    # `length` пази резултата от `' '.join`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     length = len(" ".join(text.split()))
+    # Това условие е decision point: `length <= 30`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`maximum`) и прескачаме ненужната останала работа.
     if length <= 30:
         return maximum
+    # Това условие е decision point: `length <= 52`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`max(minimum + 2, base - 4)`) и прескачаме ненужната останала работа.
     if length <= 52:
         return max(minimum + 2, base - 4)
+    # Това условие е decision point: `length <= 72`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`max(minimum, base - 8)`) и прескачаме ненужната останала работа.
     if length <= 72:
         return max(minimum, base - 8)
     return minimum
 
 
 def _available_width() -> int:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `available_width` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Функцията няма входни параметри; тя чете конфигурация или създава общ ресурс.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `int`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     return CANVAS_WIDTH - (MARGIN_X * 2)
 
 
 def _item_field(item: Any, field_name: str, default: Any = None) -> Any:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `item_field` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `item` (Any), `field_name` (str), `default` (Any); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `hasattr`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `Any`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
+    # Това условие е decision point: `hasattr(item, field_name)`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`getattr(item, field_name)`) и прескачаме ненужната останала работа.
     if hasattr(item, field_name):
         return getattr(item, field_name)
+    # Това условие е decision point: `isinstance(item, dict)`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`item.get(field_name, default)`) и прескачаме ненужната останала работа.
     if isinstance(item, dict):
         return item.get(field_name, default)
     return default
 
 
 def _estimate_chars_per_line(width: int, font_size: int) -> int:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `estimate_chars_per_line` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `width` (int), `font_size` (int); имената показват каква част от контекста е собственост на тази стъпка.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `int`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
+    # Това условие е decision point: `font_size <= 0`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `1`, без да проверява по-слабите правила отдолу.
     if font_size <= 0:
         return 1
     # Exported PPT text, especially Cyrillic at large sizes, is wider than the
@@ -74,9 +129,18 @@ def _estimate_chars_per_line(width: int, font_size: int) -> int:
 
 
 def _estimate_lines(text: str, width: int, font_size: int) -> int:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `estimate_lines` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `text` (str), `width` (int), `font_size` (int); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_estimate_chars_per_line`, `math.ceil`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `int`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
+    # `cleaned` пази резултата от `' '.join`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     cleaned = " ".join(text.split())
+    # Това условие е decision point: `not cleaned`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `0`, без да проверява по-слабите правила отдолу.
     if not cleaned:
         return 0
+    # `chars_per_line` пази резултата от `_estimate_chars_per_line`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     chars_per_line = _estimate_chars_per_line(width, font_size)
     return max(1, math.ceil(len(cleaned) / chars_per_line))
 
@@ -84,7 +148,14 @@ def _estimate_lines(text: str, width: int, font_size: int) -> int:
 def _text_height(
     text: str, width: int, font_size: int, *, min_height: int = 0, padding_y: int = 0
 ) -> tuple[int, int, int]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `text_height` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `text` (str), `width` (int), `font_size` (int), `min_height` (int), `padding_y` (int); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_estimate_lines`, `_estimate_chars_per_line`, `math.ceil`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `tuple[int, int, int]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
+    # `lines` пази резултата от `_estimate_lines`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     lines = _estimate_lines(text, width, font_size)
+    # `estimated` пази резултата от `math.ceil`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     estimated = int(math.ceil(lines * font_size * TEXT_LINE_HEIGHT)) + (padding_y * 2)
     return max(min_height, estimated), lines, _estimate_chars_per_line(width, font_size)
 
@@ -99,11 +170,18 @@ def _fit_text_block(
     min_height: int = 0,
     padding_y: int = 0,
 ) -> tuple[int, int]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `fit_text_block` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `text` (str), `width` (int), `font_size` (int), `min_font_size` (int), `max_height` (int | None), `min_height` (int) и още параметри; имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_text_height`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `tuple[int, int]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     current = font_size
     height, _, _ = _text_height(text, width, current, min_height=min_height, padding_y=padding_y)
     while max_height is not None and current > min_font_size and height > max_height:
         current -= 1
         height, _, _ = _text_height(text, width, current, min_height=min_height, padding_y=padding_y)
+    # Това условие е decision point: `max_height is not None`.
+    # При вярно условие се активира `min`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if max_height is not None:
         height = min(height, max_height)
     return current, height
@@ -112,6 +190,11 @@ def _fit_text_block(
 def _make_debug(
     text: str, width: int, font_size: int, spacing_before: int = 0, spacing_after: int = 0, note: str | None = None
 ) -> LayoutDebugInfo:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `make_debug` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `text` (str), `width` (int), `font_size` (int), `spacing_before` (int), `spacing_after` (int), `note` (str | None); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_text_height`, `LayoutDebugInfo`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `LayoutDebugInfo`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     height, lines, chars_per_line = _text_height(text, width, font_size)
     return LayoutDebugInfo(
         content_length=len(text),
@@ -142,7 +225,14 @@ def _text_element(
     max_height: int | None = None,
     min_font_size: int | None = None,
 ) -> LayoutElement:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `text_element` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `element_id` (str), `region` (str), `x` (int), `y` (int), `width` (int), `text` (str) и още параметри; имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `LayoutElement`, `_fit_text_block`, `_text_height`, `_make_debug`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `LayoutElement`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     resolved_font_size = font_size
+    # Това условие е decision point: `min_font_size is not None and max_height is not None`.
+    # При вярно условие се активира `_fit_text_block`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if min_font_size is not None and max_height is not None:
         resolved_font_size, height = _fit_text_block(
             text,
@@ -173,19 +263,37 @@ def _text_element(
 
 
 def _slide_media(slide: Slide) -> dict | None:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `slide_media` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `hasattr`, `first.model_dump`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `dict | None`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     media = getattr(slide, "media", None) or []
+    # Това условие е decision point: `not media`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `None`, без да проверява по-слабите правила отдолу.
     if not media:
         return None
     first = media[0]
+    # Това условие е decision point: `isinstance(first, dict)`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`first`) и прескачаме ненужната останала работа.
     if isinstance(first, dict):
         return first
     return first.model_dump(mode="json") if hasattr(first, "model_dump") else None
 
 
 def _image_content(slide: Slide, media: dict | None) -> dict:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `image_content` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `media` (dict | None); имената показват каква част от контекста е собственост на тази стъпка.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `dict`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
+    # `metadata` е възможностите и ограниченията на един layout кандидат.
     metadata = (media or {}).get("metadata") or {}
+    # `image_class` пази резултата от `metadata.get`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     image_class = metadata.get("image_class")
+    # `width` пази резултата от `metadata.get`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     width = metadata.get("width")
+    # `height` пази резултата от `metadata.get`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     height = metadata.get("height")
     fit = (
         "contain"
@@ -203,6 +311,11 @@ def _image_content(slide: Slide, media: dict | None) -> dict:
 
 
 def _content_bottom(children: list[LayoutElement]) -> int:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `content_bottom` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `children` (list[LayoutElement]); имената показват каква част от контекста е собственост на тази стъпка.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `int`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     return max((child.y + child.height for child in children), default=0)
 
 
@@ -219,12 +332,22 @@ def _bullet_list_element(
     max_height: int | None = None,
     icon_context: str = "",
 ) -> LayoutElement:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `bullet_list_element` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `element_id` (str), `region` (str), `x` (int), `y` (int), `width` (int), `bullets` (list[str]) и още параметри; имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `LayoutElement`, `_text_height`, `list_height`, `LayoutDebugInfo`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `LayoutElement`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     text_width = max(1, width - 64)
     row_padding = 24
     row_min_height = 56
     row_gap = 16
 
     def list_height(size: int) -> int:
+        # Роля в pipeline-а: обработва стъпката `list_height` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+        # Входът идва през `size` (int); имената показват каква част от контекста е собственост на тази стъпка.
+        # Основните преходи навън са към `_text_height`; така се вижда кои отговорности функцията делегира.
+        # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+        # Изходен договор: `int`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
         return sum(
             max(_text_height(bullet, text_width, size)[0] + row_padding, row_min_height) + row_gap for bullet in bullets
         )
@@ -234,6 +357,8 @@ def _bullet_list_element(
 
     child_y = y
     children: list[LayoutElement] = []
+    # Обхождаме `enumerate(bullets)` като `(index, bullet)`, защото всеки елемент трябва да мине през една и съща pipeline стъпка.
+    # Цикълът държи обработката еднаква за всеки елемент.
     for index, bullet in enumerate(bullets):
         item_height, _, _ = _text_height(bullet, text_width, font_size)
         item_height = max(item_height + row_padding, row_min_height)
@@ -298,13 +423,27 @@ def _panel_element(
     children: list[LayoutElement],
     note: str,
 ) -> LayoutElement:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `panel_element` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `element_id` (str), `region` (str), `x` (int), `y` (int), `width` (int), `height` (int) и още параметри; имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `LayoutElement`, `child.model_copy`, `LayoutDebugInfo`, `item.model_copy`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `LayoutElement`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     def inset(child: LayoutElement) -> LayoutElement:
+        # Роля в pipeline-а: обработва стъпката `inset` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+        # Входът идва през `child` (LayoutElement); имената показват каква част от контекста е собственост на тази стъпка.
+        # Основните преходи навън са към `child.model_copy`, `item.model_copy`; така се вижда кои отговорности функцията делегира.
+        # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+        # Изходен договор: `LayoutElement`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
         available_width = max(1, width - (PANEL_PADDING * 2) - child.x)
         available_height = max(1, height - (PANEL_PADDING * 2) - child.y)
         child_width = min(child.width, available_width)
         child_height = min(child.height, available_height)
         nested = child.children
+        # Това условие е decision point: `child.kind == LayoutElementKind.BULLET_LIST`.
+        # При вярно условие се активира `item.model_copy`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if child.kind == LayoutElementKind.BULLET_LIST:
+            # `nested` пази резултата от `item.model_copy`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
+            # Comprehension синтаксисът комбинира обхождане и филтриране в една стойност; резултатът съдържа само елементите, минали условието.
             nested = [item.model_copy(update={"width": min(item.width, child_width)}) for item in child.children]
         return child.model_copy(
             update={
@@ -340,17 +479,29 @@ def _panel_element(
 
 
 def _layout_title_slide(slide: Slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `layout_title_slide` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_available_width`, `_scale_type`, `_fit_font_size`, `_fit_text_block`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `list[LayoutElement]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
+    # `width` пази резултата от `_available_width`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     width = _available_width()
+    # `title_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     title_font = _scale_type(_fit_font_size(66, slide.title or "", 38, 66), typography_scale, 34)
+    # `subtitle_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     subtitle_font = _scale_type(_fit_font_size(28, slide.subtitle or "", 18, 28), typography_scale, 18)
+    # `notes_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     notes_font = _scale_type(19, typography_scale, 16)
     y = 112
     elements: list[LayoutElement] = []
 
+    # Това условие е decision point: `slide.title`.
+    # При вярно условие се активира `_fit_text_block`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.title:
         title_font, title_height = _fit_text_block(
             slide.title, width, title_font, min_font_size=34, max_height=260, min_height=92, padding_y=8
         )
+        # `title_gap` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         title_gap = _gap(30, spacing_scale, 22)
         elements.append(
             _text_element(
@@ -369,12 +520,15 @@ def _layout_title_slide(slide: Slide, spacing_scale: float, typography_scale: fl
         )
         y += title_height + title_gap
 
+    # Това условие е decision point: `slide.subtitle`.
+    # При вярно условие се активира `min`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.subtitle:
         subtitle_width = min(960, width)
         subtitle_x = (CANVAS_WIDTH - subtitle_width) // 2
         subtitle_font, subtitle_height = _fit_text_block(
             slide.subtitle, subtitle_width, subtitle_font, min_font_size=16, max_height=96, min_height=44, padding_y=4
         )
+        # `subtitle_gap` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         subtitle_gap = _gap(18, spacing_scale, 14)
         elements.append(
             _text_element(
@@ -393,6 +547,8 @@ def _layout_title_slide(slide: Slide, spacing_scale: float, typography_scale: fl
         )
         y += subtitle_height + subtitle_gap
 
+    # Това условие е decision point: `slide.notes`.
+    # При вярно условие се активира `min`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.notes:
         notes_width = min(840, width)
         notes_x = (CANVAS_WIDTH - notes_width) // 2
@@ -418,13 +574,24 @@ def _layout_title_slide(slide: Slide, spacing_scale: float, typography_scale: fl
 def _layout_title_left_feature_slide(
     slide: Slide, spacing_scale: float, typography_scale: float
 ) -> list[LayoutElement]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `layout_title_left_feature_slide` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_available_width`, `_scale_type`, `_fit_font_size`, `_fit_text_block`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `list[LayoutElement]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
+    # `width` пази резултата от `_available_width`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     width = _available_width()
+    # `title_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     title_font = _scale_type(_fit_font_size(62, slide.title or "", 34, 62), typography_scale, 32)
+    # `subtitle_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     subtitle_font = _scale_type(_fit_font_size(26, slide.subtitle or "", 17, 26), typography_scale, 17)
+    # `notes_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     notes_font = _scale_type(18, typography_scale, 16)
     y = 104
     elements: list[LayoutElement] = []
 
+    # Това условие е decision point: `slide.title`.
+    # При вярно условие се активира `min`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.title:
         title_width = min(760, width)
         title_font, title_height = _fit_text_block(
@@ -446,6 +613,8 @@ def _layout_title_left_feature_slide(
         )
         y += title_height + _gap(30, spacing_scale, 22)
 
+    # Това условие е decision point: `slide.subtitle`.
+    # При вярно условие се активира `min`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.subtitle:
         subtitle_width = min(640, width)
         subtitle_font, subtitle_height = _fit_text_block(
@@ -467,6 +636,8 @@ def _layout_title_left_feature_slide(
         )
         y += subtitle_height + _gap(18, spacing_scale, 14)
 
+    # Това условие е decision point: `slide.notes`.
+    # При вярно условие се активира `min`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.notes:
         notes_width = min(620, width)
         notes_height, _, _ = _text_height(slide.notes, notes_width, notes_font, min_height=26)
@@ -489,15 +660,27 @@ def _layout_title_left_feature_slide(
 
 
 def _layout_bullets_slide(slide: Slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `layout_bullets_slide` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_available_width`, `_scale_type`, `_bullet_list_element`, `_fit_font_size`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `list[LayoutElement]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
+    # `width` пази резултата от `_available_width`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     width = _available_width()
+    # `title_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     title_font = _scale_type(_fit_font_size(46, slide.title or "", 34, 46), typography_scale, 32)
+    # `bullet_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     bullet_font = _scale_type(24, typography_scale, 20)
+    # `notes_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     notes_font = _scale_type(17, typography_scale, 15)
     elements: list[LayoutElement] = []
     y = 86
 
+    # Това условие е decision point: `slide.title`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.title:
         title_height, _, _ = _text_height(slide.title, width, title_font, min_height=72, padding_y=6)
+        # `title_gap` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         title_gap = _gap(34, spacing_scale, 24)
         elements.append(
             _text_element(
@@ -517,7 +700,9 @@ def _layout_bullets_slide(slide: Slide, spacing_scale: float, typography_scale: 
         y += title_height + title_gap
 
     bullets = slide.bullets or []
+    # `body_y` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     body_y = max(y + _gap(12, spacing_scale, 8), 224)
+    # `bullet_list` пази резултата от `_bullet_list_element`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     bullet_list = _bullet_list_element(
         element_id=f"{slide.id}_bullets",
         region="body",
@@ -530,8 +715,11 @@ def _layout_bullets_slide(slide: Slide, spacing_scale: float, typography_scale: 
         icon_context=f"{slide.title or ''} {getattr(slide, 'icon_intent', '') or ''}",
     )
     elements.append(bullet_list)
+    # `y` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     y = body_y + bullet_list.height + _gap(22, spacing_scale, 16)
 
+    # Това условие е decision point: `slide.notes`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.notes:
         notes_height, _, _ = _text_height(slide.notes, width, notes_font, min_height=26)
         elements.append(
@@ -553,13 +741,24 @@ def _layout_bullets_slide(slide: Slide, spacing_scale: float, typography_scale: 
 
 
 def _layout_bullets_dense_slide(slide: Slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `layout_bullets_dense_slide` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_available_width`, `_scale_type`, `_bullet_list_element`, `_fit_font_size`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `list[LayoutElement]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
+    # `width` пази резултата от `_available_width`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     width = _available_width()
+    # `title_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     title_font = _scale_type(_fit_font_size(40, slide.title or "", 28, 40), typography_scale, 28)
+    # `bullet_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     bullet_font = _scale_type(20, typography_scale, 17)
+    # `notes_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     notes_font = _scale_type(16, typography_scale, 14)
     elements: list[LayoutElement] = []
     y = 82
 
+    # Това условие е decision point: `slide.title`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.title:
         title_height, _, _ = _text_height(slide.title, width, title_font, min_height=58, padding_y=4)
         elements.append(
@@ -578,6 +777,7 @@ def _layout_bullets_dense_slide(slide: Slide, spacing_scale: float, typography_s
         )
         y += title_height + _gap(20, spacing_scale, 14)
 
+    # `bullet_list` пази резултата от `_bullet_list_element`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     bullet_list = _bullet_list_element(
         element_id=f"{slide.id}_bullets",
         region="body",
@@ -592,6 +792,8 @@ def _layout_bullets_dense_slide(slide: Slide, spacing_scale: float, typography_s
     elements.append(bullet_list)
     y += bullet_list.height + _gap(14, spacing_scale, 10)
 
+    # Това условие е decision point: `slide.notes`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.notes:
         notes_height, _, _ = _text_height(slide.notes, width, notes_font, min_height=24)
         elements.append(
@@ -612,13 +814,21 @@ def _layout_bullets_dense_slide(slide: Slide, spacing_scale: float, typography_s
 
 
 def _layout_image_bullets_slide(slide: Slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `layout_image_bullets_slide` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_scale_type`, `_bullet_list_element`, `_slide_media`, `_fit_font_size`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `list[LayoutElement]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     elements: list[LayoutElement] = []
     left_x = 88
     left_width = 560
     right_x = 708
     right_width = 484
+    # `title_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     title_font = _scale_type(_fit_font_size(38, slide.title or "", 24, 38), typography_scale, 24)
+    # `bullet_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     bullet_font = _scale_type(21, typography_scale, 18)
+    # `notes_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     notes_font = _scale_type(17, typography_scale, 15)
     title_y = 90
     left_height_limit = CANVAS_HEIGHT - title_y - 42
@@ -626,6 +836,8 @@ def _layout_image_bullets_slide(slide: Slide, spacing_scale: float, typography_s
     inner_height = left_height_limit - (PANEL_PADDING * 2)
 
     left_children: list[LayoutElement] = []
+    # Това условие е decision point: `slide.title`.
+    # При вярно условие се активира `_fit_text_block`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.title:
         title_font, title_height = _fit_text_block(
             slide.title, inner_width, title_font, min_font_size=20, max_height=170, min_height=72, padding_y=8
@@ -650,9 +862,13 @@ def _layout_image_bullets_slide(slide: Slide, spacing_scale: float, typography_s
     else:
         offset_y = 0
 
+    # `bullet_y` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     bullet_y = offset_y + _gap(10, spacing_scale, 8)
+    # `notes_height` пази резултата от `_text_height`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     notes_height = _text_height(slide.notes or "", inner_width, notes_font, min_height=26)[0] if slide.notes else 0
+    # `notes_reserve` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     notes_reserve = notes_height + _gap(18, spacing_scale, 12) if slide.notes else 0
+    # `bullet_list` пази резултата от `_bullet_list_element`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     bullet_list = _bullet_list_element(
         element_id=f"{slide.id}_bullets",
         region="body",
@@ -665,8 +881,11 @@ def _layout_image_bullets_slide(slide: Slide, spacing_scale: float, typography_s
         icon_context=f"{slide.title or ''} {getattr(slide, 'icon_intent', '') or ''}",
     )
     left_children.append(bullet_list)
+    # `offset_y` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     offset_y = bullet_y + bullet_list.height + _gap(24, spacing_scale, 16)
 
+    # Това условие е decision point: `slide.notes`.
+    # При вярно условие се активира `left_children.append`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.notes:
         left_children.append(
             _text_element(
@@ -683,6 +902,7 @@ def _layout_image_bullets_slide(slide: Slide, spacing_scale: float, typography_s
             )
         )
 
+    # `left_height` пази резултата от `_content_bottom`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     left_height = min(CANVAS_HEIGHT - title_y - 42, max(500, _content_bottom(left_children) + (PANEL_PADDING * 2)))
     elements.append(
         _panel_element(
@@ -699,6 +919,7 @@ def _layout_image_bullets_slide(slide: Slide, spacing_scale: float, typography_s
 
     image_height = 460
     image_y = 136
+    # `media` пази резултата от `_slide_media`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     media = _slide_media(slide)
     image_children = [
         LayoutElement(
@@ -738,19 +959,29 @@ def _layout_image_bullets_slide(slide: Slide, spacing_scale: float, typography_s
 
 
 def _layout_image_focus_split_slide(slide: Slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `layout_image_focus_split_slide` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_scale_type`, `_slide_media`, `_fit_font_size`, `_fit_text_block`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `list[LayoutElement]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     elements: list[LayoutElement] = []
     left_x = 88
     left_width = 430
     right_x = 548
     right_width = 648
+    # `title_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     title_font = _scale_type(_fit_font_size(36, slide.title or "", 26, 36), typography_scale, 25)
+    # `bullet_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     bullet_font = _scale_type(21, typography_scale, 18)
+    # `notes_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     notes_font = _scale_type(16, typography_scale, 14)
     panel_y = 92
     inner_width = left_width - (PANEL_PADDING * 2)
 
     left_children: list[LayoutElement] = []
     y = 0
+    # Това условие е decision point: `slide.title`.
+    # При вярно условие се активира `_fit_text_block`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.title:
         title_font, title_height = _fit_text_block(
             slide.title, inner_width, title_font, min_font_size=20, max_height=150, min_height=60, padding_y=6
@@ -770,7 +1001,10 @@ def _layout_image_focus_split_slide(slide: Slide, spacing_scale: float, typograp
             )
         )
         y += title_height + _gap(34, spacing_scale, 24)
+    # Това условие е decision point: `slide.bullets`.
+    # При вярно условие се активира `_bullet_list_element`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.bullets:
+        # `bullets` пази резултата от `_bullet_list_element`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         bullets = _bullet_list_element(
             element_id=f"{slide.id}_bullets",
             region="body",
@@ -784,6 +1018,8 @@ def _layout_image_focus_split_slide(slide: Slide, spacing_scale: float, typograp
         )
         left_children.append(bullets)
         y += bullets.height + _gap(16, spacing_scale, 10)
+    # Това условие е decision point: `slide.notes`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.notes:
         notes_height, _, _ = _text_height(slide.notes, inner_width, notes_font, min_height=24)
         left_children.append(
@@ -801,6 +1037,7 @@ def _layout_image_focus_split_slide(slide: Slide, spacing_scale: float, typograp
             )
         )
 
+    # `left_height` пази резултата от `_content_bottom`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     left_height = max(500, _content_bottom(left_children) + (PANEL_PADDING * 2))
     elements.append(
         _panel_element(
@@ -815,7 +1052,9 @@ def _layout_image_focus_split_slide(slide: Slide, spacing_scale: float, typograp
         )
     )
 
+    # `media` пази резултата от `_slide_media`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     media = _slide_media(slide)
+    # `image_children` пази резултата от `LayoutElement`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     image_children = [
         LayoutElement(
             id=f"{slide.id}_image",
@@ -854,18 +1093,28 @@ def _layout_image_focus_split_slide(slide: Slide, spacing_scale: float, typograp
 
 
 def _layout_hero_image_slide(slide: Slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `layout_hero_image_slide` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_scale_type`, `_slide_media`, `_fit_font_size`, `_fit_text_block`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `list[LayoutElement]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     elements: list[LayoutElement] = []
     left_x = 88
     left_width = 468
     right_x = 616
     right_width = 580
+    # `title_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     title_font = _scale_type(_fit_font_size(44, slide.title or "", 28, 44), typography_scale, 26)
+    # `subtitle_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     subtitle_font = _scale_type(_fit_font_size(24, slide.subtitle or "", 16, 24), typography_scale, 16)
+    # `notes_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     notes_font = _scale_type(17, typography_scale, 15)
 
     left_children: list[LayoutElement] = []
     y = 168
     title_offset = 0
+    # Това условие е decision point: `slide.title`.
+    # При вярно условие се активира `_fit_text_block`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.title:
         title_font, title_height = _fit_text_block(
             slide.title, left_width, title_font, min_font_size=24, max_height=180, min_height=68, padding_y=6
@@ -884,7 +1133,10 @@ def _layout_hero_image_slide(slide: Slide, spacing_scale: float, typography_scal
                 note="hero title",
             )
         )
+        # `title_offset` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         title_offset = title_height + _gap(28, spacing_scale, 20)
+    # Това условие е decision point: `slide.subtitle`.
+    # При вярно условие се активира `_fit_text_block`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.subtitle:
         subtitle_font, subtitle_height = _fit_text_block(
             slide.subtitle, left_width, subtitle_font, min_font_size=15, max_height=96, min_height=42, padding_y=4
@@ -904,6 +1156,8 @@ def _layout_hero_image_slide(slide: Slide, spacing_scale: float, typography_scal
             )
         )
         y += subtitle_height + _gap(16, spacing_scale, 12)
+    # Това условие е decision point: `slide.notes`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.notes:
         notes_height, _, _ = _text_height(slide.notes, left_width, notes_font, min_height=26)
         left_children.append(
@@ -935,7 +1189,9 @@ def _layout_hero_image_slide(slide: Slide, spacing_scale: float, typography_scal
         )
     )
 
+    # `media` пази резултата от `_slide_media`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     media = _slide_media(slide)
+    # `image_children` пази резултата от `LayoutElement`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     image_children = [
         LayoutElement(
             id=f"{slide.id}_image",
@@ -974,12 +1230,22 @@ def _layout_hero_image_slide(slide: Slide, spacing_scale: float, typography_scal
 
 
 def _layout_comparison_slide(slide: Slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `layout_comparison_slide` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_available_width`, `_scale_type`, `_text_height`, `_bullet_list_element`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `list[LayoutElement]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     elements: list[LayoutElement] = []
+    # `width` пази резултата от `_available_width`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     width = _available_width()
+    # `title_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     title_font = _scale_type(40, typography_scale, 34)
+    # `notes_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     notes_font = _scale_type(17, typography_scale, 15)
     title_y = 84
 
+    # Това условие е decision point: `slide.title`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.title:
         title_height, _, _ = _text_height(slide.title, width, title_font, min_height=54)
         elements.append(
@@ -998,6 +1264,8 @@ def _layout_comparison_slide(slide: Slide, spacing_scale: float, typography_scal
         )
         title_y += title_height + _gap(18, spacing_scale, 14)
 
+    # Това условие е decision point: `slide.notes`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.notes:
         notes_height, _, _ = _text_height(slide.notes, width, notes_font, min_height=26)
         elements.append(
@@ -1022,10 +1290,19 @@ def _layout_comparison_slide(slide: Slide, spacing_scale: float, typography_scal
     panel_y = max(title_y + 8, 196)
 
     def panel(side: str, x: int, heading: str | None, bullets: list[str]) -> LayoutElement:
+        # `heading_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
+        # Роля в pipeline-а: обработва стъпката `panel` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+        # Входът идва през `side` (str), `x` (int), `heading` (str | None), `bullets` (list[str]); имената показват каква част от контекста е собственост на тази стъпка.
+        # Основните преходи навън са към `_scale_type`, `_bullet_list_element`, `_panel_element`, `_text_height`; така се вижда кои отговорности функцията делегира.
+        # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+        # Изходен договор: `LayoutElement`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
         heading_font = _scale_type(17, typography_scale, 15)
+        # `bullet_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         bullet_font = _scale_type(19, typography_scale, 16)
         child_y = 0
         children: list[LayoutElement] = []
+        # Това условие е decision point: `heading`.
+        # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if heading:
             heading_height, _, _ = _text_height(heading, panel_width - 40, heading_font, min_height=28)
             children.append(
@@ -1045,6 +1322,7 @@ def _layout_comparison_slide(slide: Slide, spacing_scale: float, typography_scal
                 )
             )
             child_y += heading_height + _gap(14, spacing_scale, 10)
+        # `bullet_list` пази резултата от `_bullet_list_element`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         bullet_list = _bullet_list_element(
             element_id=f"{slide.id}_{side}_bullets",
             region=f"{side}.body",
@@ -1057,6 +1335,7 @@ def _layout_comparison_slide(slide: Slide, spacing_scale: float, typography_scal
             icon_context=f"{slide.title or ''} {heading or ''}",
         )
         children.append(bullet_list)
+        # `height` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         height = max(320, sum(child.height + _gap(14, spacing_scale, 10) for child in children))
         return _panel_element(
             element_id=f"{slide.id}_{side}_panel",
@@ -1075,11 +1354,20 @@ def _layout_comparison_slide(slide: Slide, spacing_scale: float, typography_scal
 
 
 def _layout_timeline_slide(slide: Slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `layout_timeline_slide` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_available_width`, `_scale_type`, `_text_height`, `_item_field`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `list[LayoutElement]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     elements: list[LayoutElement] = []
+    # `width` пази резултата от `_available_width`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     width = _available_width()
+    # `title_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     title_font = _scale_type(40, typography_scale, 34)
     title_y = 84
 
+    # Това условие е decision point: `slide.title`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.title:
         title_height, _, _ = _text_height(slide.title, width, title_font, min_height=54)
         elements.append(
@@ -1102,15 +1390,23 @@ def _layout_timeline_slide(slide: Slide, spacing_scale: float, typography_scale:
     y = max(title_y, 168)
     label_width = 220
     row_width = width
+    # Обхождаме `enumerate(slide.timeline or [])` като `(index, step)`, защото всеки елемент трябва да мине през една и съща pipeline стъпка.
+    # Цикълът държи обработката еднаква за всеки елемент.
     for index, step in enumerate(slide.timeline or []):
         row_children: list[LayoutElement] = []
+        # `label_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         label_font = _scale_type(18, typography_scale, 15)
+        # `detail_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         detail_font = _scale_type(18, typography_scale, 15)
+        # `step_label` пази резултата от `_item_field`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         step_label = _item_field(step, "label", "")
+        # `step_detail` пази резултата от `_item_field`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         step_detail = _item_field(step, "detail")
+        # `detail_w` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         detail_w = row_width - label_width - _gap(40, spacing_scale, 28)
         label_h, _, _ = _text_height(step_label, label_width, label_font, min_height=28)
         detail_h, _, _ = _text_height(step_detail or "", detail_w, detail_font, min_height=28)
+        # `row_h` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         row_h = max(label_h, detail_h) + _gap(48, spacing_scale, 34)
         row_children.append(
             _text_element(
@@ -1128,6 +1424,8 @@ def _layout_timeline_slide(slide: Slide, spacing_scale: float, typography_scale:
                 note="timeline label",
             )
         )
+        # Това условие е decision point: `step_detail`.
+        # При вярно условие се активира `row_children.append`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if step_detail:
             row_children.append(
                 _text_element(
@@ -1164,11 +1462,20 @@ def _layout_timeline_slide(slide: Slide, spacing_scale: float, typography_scale:
 
 
 def _layout_statistics_slide(slide: Slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `layout_statistics_slide` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_available_width`, `_scale_type`, `_gap`, `_text_height`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `list[LayoutElement]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     elements: list[LayoutElement] = []
+    # `width` пази резултата от `_available_width`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     width = _available_width()
+    # `title_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     title_font = _scale_type(40, typography_scale, 34)
     title_y = 84
 
+    # Това условие е decision point: `slide.title`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.title:
         title_height, _, _ = _text_height(slide.title, width, title_font, min_height=54)
         elements.append(
@@ -1189,11 +1496,14 @@ def _layout_statistics_slide(slide: Slide, spacing_scale: float, typography_scal
 
     cards = slide.statistics or []
     columns = 3 if len(cards) > 2 else max(1, len(cards))
+    # `grid_gap` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     grid_gap = _gap(GRID_GAP, spacing_scale, 16)
     card_width = int((width - (grid_gap * (columns - 1))) / columns)
     card_height = 208
     x0 = MARGIN_X
     y0 = max(title_y, 192)
+    # Обхождаме `enumerate(cards)` като `(index, stat)`, защото всеки елемент трябва да мине през една и съща pipeline стъпка.
+    # Цикълът държи обработката еднаква за всеки елемент.
     for index, stat in enumerate(cards):
         col = index % columns
         row = index // columns
@@ -1201,12 +1511,18 @@ def _layout_statistics_slide(slide: Slide, spacing_scale: float, typography_scal
         y = y0 + (row * (card_height + grid_gap))
         inner_width = card_width - (PANEL_PADDING * 2)
         inner_height = card_height - (PANEL_PADDING * 2)
+        # `value_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         value_font = _scale_type(36, typography_scale, 26)
+        # `label_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         label_font = _scale_type(16, typography_scale, 13)
+        # `detail_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         detail_font = _scale_type(15, typography_scale, 12)
         child_elements: list[LayoutElement] = []
+        # `stat_value` пази резултата от `_item_field`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         stat_value = _item_field(stat, "value", "")
+        # `stat_label` пази резултата от `_item_field`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         stat_label = _item_field(stat, "label", "")
+        # `stat_detail` пази резултата от `_item_field`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         stat_detail = _item_field(stat, "detail")
         value_font, value_h = _fit_text_block(
             stat_value, inner_width, value_font, min_font_size=22, max_height=54, min_height=38
@@ -1234,6 +1550,8 @@ def _layout_statistics_slide(slide: Slide, spacing_scale: float, typography_scal
                 note="stat value",
             )
         )
+        # `label_gap` пази резултата от `_gap`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
+        label_gap = _gap(10, spacing_scale, 8)
         child_elements.append(
             _text_element(
                 element_id=f"{slide.id}_stat_{index + 1}_label",
@@ -1250,6 +1568,8 @@ def _layout_statistics_slide(slide: Slide, spacing_scale: float, typography_scal
                 note="stat label",
             )
         )
+        # Това условие е decision point: `stat_detail`.
+        # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if stat_detail:
             detail_y = value_h + label_gap + label_h + detail_gap
             detail_height = max(22, inner_height - detail_y)
@@ -1287,11 +1607,20 @@ def _layout_statistics_slide(slide: Slide, spacing_scale: float, typography_scal
 def _layout_statistics_featured_slide(
     slide: Slide, spacing_scale: float, typography_scale: float
 ) -> list[LayoutElement]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `layout_statistics_featured_slide` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_available_width`, `_scale_type`, `_item_field`, `_text_height`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `list[LayoutElement]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     elements: list[LayoutElement] = []
+    # `width` пази резултата от `_available_width`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     width = _available_width()
+    # `title_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     title_font = _scale_type(38, typography_scale, 32)
     title_y = 84
 
+    # Това условие е decision point: `slide.title`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.title:
         title_height, _, _ = _text_height(slide.title, width, title_font, min_height=52)
         elements.append(
@@ -1311,6 +1640,8 @@ def _layout_statistics_featured_slide(
         title_y += title_height + _gap(22, spacing_scale, 16)
 
     cards = slide.statistics or []
+    # Това условие е decision point: `not cards`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`elements`) и прескачаме ненужната останала работа.
     if not cards:
         return elements
 
@@ -1318,11 +1649,17 @@ def _layout_statistics_featured_slide(
     hero_width = 388
     hero_height = 300
     hero_children: list[LayoutElement] = []
+    # `hero_value` пази резултата от `_item_field`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     hero_value = _item_field(hero, "value", "")
+    # `hero_label` пази резултата от `_item_field`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     hero_label = _item_field(hero, "label", "")
+    # `hero_detail` пази резултата от `_item_field`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     hero_detail = _item_field(hero, "detail")
+    # `hero_value_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     hero_value_font = _scale_type(_fit_font_size(42, hero_value, 24, 42), typography_scale, 24)
+    # `hero_label_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     hero_label_font = _scale_type(17, typography_scale, 14)
+    # `hero_detail_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     hero_detail_font = _scale_type(15, typography_scale, 12)
     value_h, _, _ = _text_height(hero_value, hero_width - 40, hero_value_font, min_height=52)
     label_h, _, _ = _text_height(hero_label, hero_width - 40, hero_label_font, min_height=24)
@@ -1358,6 +1695,8 @@ def _layout_statistics_featured_slide(
             note="hero stat label",
         )
     )
+    # Това условие е decision point: `hero_detail`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if hero_detail:
         detail_h, _, _ = _text_height(hero_detail, hero_width - 40, hero_detail_font, min_height=22)
         hero_children.append(
@@ -1393,13 +1732,17 @@ def _layout_statistics_featured_slide(
     grid_x = MARGIN_X + hero_width + 28
     grid_width = CANVAS_WIDTH - grid_x - MARGIN_X
     card_width = int((grid_width - 24) / 2)
-    card_height = 196
+    card_height = 176
+    # Обхождаме `enumerate(secondary[:4])` като `(index, stat)`, защото всеки елемент трябва да мине през една и съща pipeline стъпка.
+    # Цикълът държи обработката еднаква за всеки елемент.
     for index, stat in enumerate(secondary[:4]):
         col = index % 2
         row = index // 2
         x = grid_x + col * (card_width + 24)
         y = max(title_y, 176) + row * (card_height + 24)
+        # `value` пази резултата от `_item_field`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         value = _item_field(stat, "value", "")
+        # `label` пази резултата от `_item_field`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         label = _item_field(stat, "label", "")
         detail = _item_field(stat, "detail")
         inner_width = card_width - (PANEL_PADDING * 2)
@@ -1451,6 +1794,8 @@ def _layout_statistics_featured_slide(
                 note="stat label",
             ),
         ]
+        # Това условие е decision point: `detail`.
+        # При вярно условие се активира `child_elements.append`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if detail:
             detail_y = label_y + label_h + 8
             child_elements.append(
@@ -1485,14 +1830,24 @@ def _layout_statistics_featured_slide(
 
 
 def _layout_quote_slide(slide: Slide, spacing_scale: float, typography_scale: float) -> list[LayoutElement]:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `layout_quote_slide` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_scale_type`, `_text_height`, `_text_element`, `_gap`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `list[LayoutElement]`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     elements: list[LayoutElement] = []
     quote_width = 960
     quote_x = (CANVAS_WIDTH - quote_width) // 2
     quote_y = 220
+    # `quote_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     quote_font = _scale_type(46, typography_scale, 38)
+    # `attr_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     attr_font = _scale_type(22, typography_scale, 18)
+    # `notes_font` пази резултата от `_scale_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     notes_font = _scale_type(17, typography_scale, 15)
 
+    # Това условие е decision point: `slide.quote`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.quote:
         quote_h, _, _ = _text_height(slide.quote, quote_width, quote_font, min_height=100)
         elements.append(
@@ -1511,6 +1866,8 @@ def _layout_quote_slide(slide: Slide, spacing_scale: float, typography_scale: fl
         )
         quote_y += quote_h + _gap(18, spacing_scale, 14)
 
+    # Това условие е decision point: `slide.attribution`.
+    # При вярно условие се активира `min`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.attribution:
         attr_width = min(700, quote_width)
         attr_x = (CANVAS_WIDTH - attr_width) // 2
@@ -1531,6 +1888,8 @@ def _layout_quote_slide(slide: Slide, spacing_scale: float, typography_scale: fl
         )
         quote_y += attr_h + _gap(16, spacing_scale, 12)
 
+    # Това условие е decision point: `slide.notes`.
+    # При вярно условие се активира `_text_height`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if slide.notes:
         notes_width = 760
         notes_x = (CANVAS_WIDTH - notes_width) // 2
@@ -1553,7 +1912,13 @@ def _layout_quote_slide(slide: Slide, spacing_scale: float, typography_scale: fl
 
 
 def _layout_slide(slide: Slide, debug_mode: bool, spacing_scale: float, typography_scale: float) -> LayoutedSlide:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `layout_slide` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `slide` (Slide), `debug_mode` (bool), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `layout_function`, `LayoutedSlide`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `LayoutedSlide`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     layout_name = slide.layout_name
+    # `layout_function` пази резултата от `{'title.centered': _layout_title_slide, 'title.left_feature': _layout_title_left_feature_slide, 'content.bullets': _layout_bullets_slide, 'content.bullets_dense': _layout_bullets_dense_slide, 'content.image_split': _layout_image_bullets_slide, 'content.image_focus_split': _layout_image_focus_split_slide, 'hero.focus': _layout_hero_image_slide, 'comparison.split': _layout_comparison_slide, 'timeline.stacked': _layout_timeline_slide, 'statistics.grid': _layout_statistics_slide, 'statistics.featured': _layout_statistics_featured_slide, 'quote.centered': _layout_quote_slide}.get`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     layout_function = {
         "title.centered": _layout_title_slide,
         "title.left_feature": _layout_title_left_feature_slide,
@@ -1568,6 +1933,7 @@ def _layout_slide(slide: Slide, debug_mode: bool, spacing_scale: float, typograp
         "statistics.featured": _layout_statistics_featured_slide,
         "quote.centered": _layout_quote_slide,
     }.get(layout_name, _layout_bullets_slide)
+    # `elements` пази резултата от `layout_function`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     elements = layout_function(slide, spacing_scale, typography_scale)
 
     return LayoutedSlide(
@@ -1591,6 +1957,11 @@ def build_layouted_presentation(
     spacing_scale: float = 1.0,
     typography_scale: float = 1.0,
 ) -> LayoutedPresentationDocument:
+    # Роля в pipeline-а: Прилага избрания layout към всеки semantic слайд и създава renderer-ready документ с конкретна геометрия.
+    # Входът идва през `document` (PresentationDocument), `debug_mode` (bool), `spacing_scale` (float), `typography_scale` (float); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `LayoutedPresentationDocument`, `_layout_slide`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `LayoutedPresentationDocument`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     return LayoutedPresentationDocument(
         title=document.title,
         version=document.version,

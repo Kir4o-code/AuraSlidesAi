@@ -1,3 +1,5 @@
+# Роля на модула: Регистърът на позволените layouts и renderer capabilities. Работи като каталог в библиотека: selector-ът може да избира само описани тук възможности.
+# Чети коментарите като обяснение на причината за кода и връзката му със следващия слой, а не като буквален превод на Python синтаксиса.
 from app.semantic.contracts import (
     Alignment,
     LayoutRegion,
@@ -8,6 +10,7 @@ from app.semantic.contracts import (
     RendererTarget,
 )
 
+# `LAYOUT_SPEC_REGISTRY` пази резултата от `LayoutSpec`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
 LAYOUT_SPEC_REGISTRY: dict[str, LayoutSpec] = {
     "title.centered": LayoutSpec(
         name="title.centered",
@@ -286,6 +289,7 @@ LAYOUT_SPEC_REGISTRY: dict[str, LayoutSpec] = {
 }
 
 
+# `RENDERER_CAPABILITY_MATRIX` пази резултата от `RendererCapabilities`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
 RENDERER_CAPABILITY_MATRIX: dict[RendererTarget, RendererCapabilities] = {
     RendererTarget.REACT: RendererCapabilities(
         supports_css=True,
@@ -351,8 +355,18 @@ RENDERER_CAPABILITY_MATRIX: dict[RendererTarget, RendererCapabilities] = {
 
 
 def get_layout_spec(name: str) -> LayoutSpec:
+    # Роля в pipeline-а: осигурява достъп до общ ресурс или конфигурация, без caller-ът да знае как се създава.
+    # Входът идва през `name` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `LayoutSpec`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     return LAYOUT_SPEC_REGISTRY[name]
 
 
 def build_renderer_context(target: RendererTarget) -> RendererContext:
+    # Роля в pipeline-а: сглобява по-ниско ниво данни в обект, който следващият pipeline етап разбира директно.
+    # Входът идва през `target` (RendererTarget); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `RendererContext`, `RENDERER_CAPABILITY_MATRIX[target].model_copy`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `RendererContext`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
     return RendererContext(target=target, capabilities=RENDERER_CAPABILITY_MATRIX[target].model_copy(deep=True))

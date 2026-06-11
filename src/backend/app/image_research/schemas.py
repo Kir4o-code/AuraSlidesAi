@@ -1,9 +1,13 @@
+# Роля на модула: Помощен модул в backend pipeline-а; коментарите по-долу обясняват конкретните му граници и решения.
+# Чети коментарите като обяснение на причината за кода и връзката му със следващия слой, а не като буквален превод на Python синтаксиса.
 from enum import Enum
 
 from pydantic import BaseModel, Field
 
 
 class EntityType(str, Enum):
+    # Роля на класа: Този Enum ограничава позволените стойности, за да не се разнасят свободни string-ове и различни изписвания през pipeline-а.
+    # Наследяването от `str` и `Enum` позволява стойността да се сериализира като текст, но да остане строго ограничена.
     PERSON = "PERSON"
     COMPANY = "COMPANY"
     ORGANIZATION = "ORGANIZATION"
@@ -14,12 +18,16 @@ class EntityType(str, Enum):
 
 
 class ResearchImageSource(str, Enum):
+    # Роля на класа: Този Enum ограничава позволените стойности, за да не се разнасят свободни string-ове и различни изписвания през pipeline-а.
+    # Наследяването от `str` и `Enum` позволява стойността да се сериализира като текст, но да остане строго ограничена.
     WIKIPEDIA = "WIKIPEDIA"
     WIKIMEDIA_COMMONS = "WIKIMEDIA_COMMONS"
     STOCK = "STOCK"
 
 
 class ImageSourceSelection(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     entity_type: EntityType
     image_source: ResearchImageSource
     search_query: str
@@ -27,6 +35,8 @@ class ImageSourceSelection(BaseModel):
 
 
 class ImageResearchRequest(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     prompt: str = Field(..., min_length=3)
     context_text: str | None = None
     style: str | None = None
@@ -39,6 +49,8 @@ class ImageResearchRequest(BaseModel):
 
 
 class SearchPlan(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     main_query: str
     alternative_queries: list[str] = Field(default_factory=list)
     visual_requirements: list[str] = Field(default_factory=list)
@@ -49,6 +61,8 @@ class SearchPlan(BaseModel):
 
 
 class ImageCandidate(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     id: str
     source: str
     title: str | None = None
@@ -72,6 +86,8 @@ class ImageCandidate(BaseModel):
 
 
 class SelectedImage(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     local_path: str
     public_url: str
     source: str
@@ -88,6 +104,8 @@ class SelectedImage(BaseModel):
 
 
 class ImageResearchResponse(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     success: bool
     selected_image: SelectedImage | None
     selected_images: list[SelectedImage] = Field(default_factory=list)

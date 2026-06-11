@@ -1,3 +1,5 @@
+# Роля на модула: Единният източник на theme tokens. Layout и exporters четат оттук, вместо да дублират визуални решения.
+# Чети коментарите като обяснение на причината за кода и връзката му със следващия слой, а не като буквален превод на Python синтаксиса.
 from dataclasses import dataclass
 
 from app.schemas.presentation import ThemeName
@@ -17,6 +19,8 @@ DEFAULT_THEME_NAME = ThemeName.MODERN_DARK_TECH.value
 
 @dataclass(frozen=True)
 class ThemeTokens:
+    # Роля на класа: Класът групира общо състояние и операции, които принадлежат на една pipeline отговорност.
+    # Методите получават `self`, затова могат да споделят конфигурация и кеширани ресурси без глобални променливи.
     name: str
     display_name: str
     description: str
@@ -59,6 +63,7 @@ class ThemeTokens:
     supported_slide_layout_types: tuple[str, ...] = SUPPORTED_LAYOUTS
 
 
+# `THEME_REGISTRY` пази резултата от `ThemeTokens`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
 THEME_REGISTRY: dict[str, ThemeTokens] = {
     ThemeName.CLEAN_SCHOOL.value: ThemeTokens(
         name=ThemeName.CLEAN_SCHOOL.value,
@@ -424,11 +429,24 @@ THEME_ALIASES = {
 
 
 def resolve_theme_name(value: str | None) -> str:
+    # Роля в pipeline-а: взима решение между няколко възможни източника или стратегии и връща готов резултат.
+    # Входът идва през `value` (str | None); имената показват каква част от контекста е собственост на тази стъпка.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str`. Резултатът се подава към caller-а като стабилна междинна стойност за следващата стъпка.
+    # Това условие е decision point: `not value`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`DEFAULT_THEME_NAME`) и прескачаме ненужната останала работа.
     if not value:
         return DEFAULT_THEME_NAME
+    # `normalized` е каноничната версия на входа, върху която сравнението е стабилно независимо от casing и излишни символи.
     normalized = THEME_ALIASES.get(value.strip().lower(), value.strip().lower())
     return normalized if normalized in THEME_REGISTRY else DEFAULT_THEME_NAME
 
 
 def get_theme_tokens(value: str | None) -> ThemeTokens:
+    # Роля в pipeline-а: осигурява достъп до общ ресурс или конфигурация, без caller-ът да знае как се създава.
+    # Входът идва през `value` (str | None); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `resolve_theme_name`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `ThemeTokens`. Резултатът се подава към caller-а като стабилна междинна стойност за следващата стъпка.
     return THEME_REGISTRY[resolve_theme_name(value)]
