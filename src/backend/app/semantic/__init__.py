@@ -1,3 +1,5 @@
+# Роля на модула: Помощен модул в backend pipeline-а; коментарите по-долу обясняват конкретните му граници и решения.
+# Чети коментарите като обяснение на причината за кода и връзката му със следващия слой, а не като буквален превод на Python синтаксиса.
 from app.semantic.catalog import LAYOUT_SPEC_REGISTRY, RENDERER_CAPABILITY_MATRIX
 from app.semantic.contracts import (
     Alignment,

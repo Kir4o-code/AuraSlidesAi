@@ -1,3 +1,5 @@
+# Роля на модула: Вътрешният договор на rendering pipeline-а. Работи като технически чертеж, който остава еднакъв независимо дали накрая се строи PPTX или PDF.
+# Чети коментарите като обяснение на причината за кода и връзката му със следващия слой, а не като буквален превод на Python синтаксиса.
 from __future__ import annotations
 
 from enum import Enum
@@ -7,12 +9,16 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class Alignment(str, Enum):
+    # Роля на класа: Този Enum ограничава позволените стойности, за да не се разнасят свободни string-ове и различни изписвания през pipeline-а.
+    # Наследяването от `str` и `Enum` позволява стойността да се сериализира като текст, но да остане строго ограничена.
     START = "start"
     CENTER = "center"
     END = "end"
 
 
 class LayoutRegionRole(str, Enum):
+    # Роля на класа: Този Enum ограничава позволените стойности, за да не се разнасят свободни string-ове и различни изписвания през pipeline-а.
+    # Наследяването от `str` и `Enum` позволява стойността да се сериализира като текст, но да остане строго ограничена.
     TITLE = "title"
     BODY = "body"
     MEDIA = "media"
@@ -21,6 +27,8 @@ class LayoutRegionRole(str, Enum):
 
 
 class RendererTarget(str, Enum):
+    # Роля на класа: Този Enum ограничава позволените стойности, за да не се разнасят свободни string-ове и различни изписвания през pipeline-а.
+    # Наследяването от `str` и `Enum` позволява стойността да се сериализира като текст, но да остане строго ограничена.
     REACT = "react"
     PPTX = "pptx"
     PDF = "pdf"
@@ -29,6 +37,8 @@ class RendererTarget(str, Enum):
 
 
 class MediaKind(str, Enum):
+    # Роля на класа: Този Enum ограничава позволените стойности, за да не се разнасят свободни string-ове и различни изписвания през pipeline-а.
+    # Наследяването от `str` и `Enum` позволява стойността да се сериализира като текст, но да остане строго ограничена.
     IMAGE = "image"
     CHART = "chart"
     ICON = "icon"
@@ -39,6 +49,8 @@ class MediaKind(str, Enum):
 
 
 class ThemeFonts(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     heading: str = Field(min_length=1, max_length=80)
@@ -49,15 +61,27 @@ class ThemeFonts(BaseModel):
     @field_validator("heading", "body", "mono")
     @classmethod
     def _reject_css_font_stacks(cls, value: str | None) -> str | None:
+        # Роля в pipeline-а: Това е вътрешна помощна стъпка: валидира или описва част от договора между два pipeline слоя.
+        # Входът идва през `cls` (неуточнен тип), `value` (str | None); имената показват каква част от контекста е собственост на тази стъпка.
+        # Основните преходи навън са към `lowered.startswith`, `ValueError`; така се вижда кои отговорности функцията делегира.
+        # Декораторът над функцията променя начина, по който framework-ът я регистрира или валидира, без да променя основното ѝ тяло.
+        # Изходен договор: `str | None`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
+        # Това условие е decision point: `value is None`.
+        # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `None`, без да проверява по-слабите правила отдолу.
         if value is None:
             return None
+        # `lowered` пази резултата от `value.strip().lower`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         lowered = value.strip().lower()
+        # Това условие е decision point: `',' in lowered or 'font-family' in lowered or lowered.startswith('var(')`.
+        # При вярно условие се активира `ValueError`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if "," in lowered or "font-family" in lowered or lowered.startswith("var("):
             raise ValueError("Theme font names must be semantic font families, not CSS font stacks.")
         return value
 
 
 class ThemeTokens(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     background: str = Field(min_length=1, max_length=40)
@@ -91,15 +115,27 @@ class ThemeTokens(BaseModel):
     )
     @classmethod
     def _reject_css_fragments(cls, value: str | None) -> str | None:
+        # Роля в pipeline-а: Това е вътрешна помощна стъпка: валидира или описва част от договора между два pipeline слоя.
+        # Входът идва през `cls` (неуточнен тип), `value` (str | None); имената показват каква част от контекста е собственост на тази стъпка.
+        # Основните преходи навън са към `ValueError`; така се вижда кои отговорности функцията делегира.
+        # Декораторът над функцията променя начина, по който framework-ът я регистрира или валидира, без да променя основното ѝ тяло.
+        # Изходен договор: `str | None`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
+        # Това условие е decision point: `value is None`.
+        # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `None`, без да проверява по-слабите правила отдолу.
         if value is None:
             return None
+        # `lowered` пази резултата от `value.strip().lower`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         lowered = value.strip().lower()
+        # Това условие е decision point: `any((marker in lowered for marker in (';', '{', '}', 'font:', 'margin:', 'padding:', 'pos...`.
+        # При вярно условие се активира `ValueError`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if any(marker in lowered for marker in (";", "{", "}", "font:", "margin:", "padding:", "position:")):
             raise ValueError("Theme tokens must be semantic values, not CSS declarations.")
         return value
 
 
 class ThemeDefinition(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(min_length=1, max_length=80)
@@ -111,6 +147,8 @@ class ThemeDefinition(BaseModel):
 
 
 class SlideMediaRef(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     kind: MediaKind = MediaKind.IMAGE
@@ -125,6 +163,8 @@ class SlideMediaRef(BaseModel):
 
 
 class Slide(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(min_length=1, max_length=40)
@@ -150,10 +190,17 @@ class Slide(BaseModel):
     @model_validator(mode="after")
     def _reject_style_fields(self) -> "Slide":
         # This model intentionally does not carry render styling.
+        # Роля в pipeline-а: Това е вътрешна помощна стъпка: валидира или описва част от договора между два pipeline слоя.
+        # Входът идва през `self` (неуточнен тип); имената показват каква част от контекста е собственост на тази стъпка.
+        # Функцията работи основно с локални стойности и не делегира към други services.
+        # Декораторът над функцията променя начина, по който framework-ът я регистрира или валидира, без да променя основното ѝ тяло.
+        # Изходен договор: `'Slide'`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
         return self
 
 
 class PresentationDocument(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(min_length=1, max_length=160)
@@ -163,15 +210,26 @@ class PresentationDocument(BaseModel):
 
     @model_validator(mode="after")
     def _ensure_sequential_slide_order(self) -> "PresentationDocument":
+        # Роля в pipeline-а: Това е вътрешна помощна стъпка: валидира или описва част от договора между два pipeline слоя.
+        # Входът идва през `self` (неуточнен тип); имената показват каква част от контекста е собственост на тази стъпка.
+        # Основните преходи навън са към `ValueError`; така се вижда кои отговорности функцията делегира.
+        # Декораторът над функцията променя начина, по който framework-ът я регистрира или валидира, без да променя основното ѝ тяло.
+        # Изходен договор: `'PresentationDocument'`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
         orders = [slide.order for slide in self.slides]
+        # Това условие е decision point: `orders != sorted(orders)`.
+        # При вярно условие се активира `ValueError`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if orders != sorted(orders):
             raise ValueError("PresentationDocument slides must be ordered.")
+        # Това условие е decision point: `len(set(orders)) != len(orders)`.
+        # При вярно условие се активира `ValueError`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if len(set(orders)) != len(orders):
             raise ValueError("PresentationDocument slide order must be unique.")
         return self
 
 
 class LayoutRegion(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(min_length=1, max_length=80)
@@ -184,6 +242,8 @@ class LayoutRegion(BaseModel):
 
 
 class LayoutSpec(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=80)
@@ -198,13 +258,22 @@ class LayoutSpec(BaseModel):
 
     @model_validator(mode="after")
     def _validate_regions(self) -> "LayoutSpec":
+        # Роля в pipeline-а: Това е вътрешна помощна стъпка: пази границата на pipeline-а, като отказва данни, които следващият слой не може безопасно да обработи.
+        # Входът идва през `self` (неуточнен тип); имената показват каква част от контекста е собственост на тази стъпка.
+        # Основните преходи навън са към `ValueError`; така се вижда кои отговорности функцията делегира.
+        # Декораторът над функцията променя начина, по който framework-ът я регистрира или валидира, без да променя основното ѝ тяло.
+        # Изходен договор: `'LayoutSpec'`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
         region_ids = [region.id for region in self.regions]
+        # Това условие е decision point: `len(set(region_ids)) != len(region_ids)`.
+        # При вярно условие се активира `ValueError`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if len(set(region_ids)) != len(region_ids):
             raise ValueError(f"LayoutSpec '{self.name}' has duplicate region ids.")
         return self
 
 
 class LayoutElementKind(str, Enum):
+    # Роля на класа: Този Enum ограничава позволените стойности, за да не се разнасят свободни string-ове и различни изписвания през pipeline-а.
+    # Наследяването от `str` и `Enum` позволява стойността да се сериализира като текст, но да остане строго ограничена.
     TEXT = "text"
     IMAGE = "image"
     PANEL = "panel"
@@ -217,6 +286,8 @@ class LayoutElementKind(str, Enum):
 
 
 class LayoutDebugInfo(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     content_length: int = Field(ge=0)
@@ -228,6 +299,8 @@ class LayoutDebugInfo(BaseModel):
 
 
 class LayoutElement(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(min_length=1, max_length=80)
@@ -249,6 +322,8 @@ class LayoutElement(BaseModel):
 
 
 class LayoutedSlide(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     slide_id: str = Field(min_length=1, max_length=40)
@@ -261,6 +336,8 @@ class LayoutedSlide(BaseModel):
 
 
 class LayoutedPresentationDocument(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(min_length=1, max_length=160)
@@ -270,13 +347,22 @@ class LayoutedPresentationDocument(BaseModel):
 
     @model_validator(mode="after")
     def _ensure_layout_slide_order(self) -> "LayoutedPresentationDocument":
+        # Роля в pipeline-а: Това е вътрешна помощна стъпка: валидира или описва част от договора между два pipeline слоя.
+        # Входът идва през `self` (неуточнен тип); имената показват каква част от контекста е собственост на тази стъпка.
+        # Основните преходи навън са към `ValueError`; така се вижда кои отговорности функцията делегира.
+        # Декораторът над функцията променя начина, по който framework-ът я регистрира или валидира, без да променя основното ѝ тяло.
+        # Изходен договор: `'LayoutedPresentationDocument'`. Резултатът се използва от следващия semantic/layout/rendering етап, без да зависи от конкретен файлов формат.
         slide_ids = [slide.slide_id for slide in self.slides]
+        # Това условие е decision point: `len(set(slide_ids)) != len(slide_ids)`.
+        # При вярно условие се активира `ValueError`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if len(set(slide_ids)) != len(slide_ids):
             raise ValueError("LayoutedPresentationDocument slide ids must be unique.")
         return self
 
 
 class RendererCapabilities(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     supports_css: bool = False
@@ -292,6 +378,8 @@ class RendererCapabilities(BaseModel):
 
 
 class RendererConstraints(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     font_fallbacks: list[str] = Field(default_factory=lambda: ["system-ui", "sans-serif"], max_length=8)
@@ -303,6 +391,8 @@ class RendererConstraints(BaseModel):
 
 
 class RendererContext(BaseModel):
+    # Роля на класа: Този Pydantic модел е договор на границата между pipeline слоеве: валидира типовете и прави сериализацията предвидима.
+    # `BaseModel` използва type annotations като runtime schema, а не само като помощ за IDE.
     model_config = ConfigDict(extra="forbid")
 
     target: RendererTarget

@@ -1,3 +1,5 @@
+# Роля на модула: Image orchestration слой. Решава кои слайдове искат изображение и дали asset-ът идва от research или Gemini generation.
+# Чети коментарите като обяснение на причината за кода и връзката му със следващия слой, а не като буквален превод на Python синтаксиса.
 import asyncio
 import logging
 import os
@@ -23,17 +25,32 @@ _image_researcher: ImageResearcher | None = None
 
 
 class ImageResearchResolutionError(Exception):
+    # Роля на класа: Този custom exception маркира конкретен тип pipeline отказ, за да може горният слой да го преведе към правилен HTTP status или fallback.
+    # Отделният exception тип позволява точно `except` правило без parsing на текстово съобщение.
     pass
 
 
 def _get_image_researcher() -> ImageResearcher:
+    # Роля в pipeline-а: Реализира lazy singleton: тежкият researcher се създава при първа нужда и после се използва повторно, вместо моделите и provider clients да се зареждат за всеки слайд.
+    # Функцията няма входни параметри; тя чете конфигурация или създава общ ресурс.
+    # Основните преходи навън са към `ImageResearcher`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `ImageResearcher`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
     global _image_researcher
+    # Това условие е decision point: `_image_researcher is None`.
+    # При вярно условие се активира `ImageResearcher`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if _image_researcher is None:
+        # `_image_researcher` пази резултата от `ImageResearcher`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         _image_researcher = ImageResearcher()
     return _image_researcher
 
 
 def _image_slides(presentation: Presentation) -> list[Slide]:
+    # Роля в pipeline-а: Работи като сито пред image pipeline-а: пропуска само слайдове, които имат image prompt и layout тип с реален image slot.
+    # Входът идва през `presentation` (Presentation); имената показват каква част от контекста е собственост на тази стъпка.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `list[Slide]`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
     return [
         slide
         for slide in presentation.slides
@@ -47,39 +64,78 @@ def _image_slides(presentation: Presentation) -> list[Slide]:
 
 
 def _infer_research_image_type(prompt: str) -> str:
+    # Роля в pipeline-а: Класифицира prompt-а чрез подредени keyword правила; първото съвпадение определя какъв тип asset трябва да търсят providers.
+    # Входът идва през `prompt` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
+    # `text` е нормализирано работно копие на текста; оригиналът остава непокътнат, а проверките стават върху предвидим формат.
     text = prompt.lower()
+    # Това условие е decision point: `any((term in text for term in ('diagram', 'chart', 'schema', 'flow', 'map', 'timeline')))`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `'diagram'`, без да проверява по-слабите правила отдолу.
     if any(term in text for term in ("diagram", "chart", "schema", "flow", "map", "timeline")):
         return "diagram"
+    # Това условие е decision point: `any((term in text for term in ('icon', 'symbol', 'logo')))`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `'icon'`, без да проверява по-слабите правила отдолу.
     if any(term in text for term in ("icon", "symbol", "logo")):
         return "icon"
+    # Това условие е decision point: `any((term in text for term in ('illustration', 'vector', 'drawing')))`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `'illustration'`, без да проверява по-слабите правила отдолу.
     if any(term in text for term in ("illustration", "vector", "drawing")):
         return "illustration"
     return "any"
 
 
 def _research_image_class(slide: Slide, prompt: str, context_text: str) -> str:
+    # Роля в pipeline-а: Събира explicit настройката на слайда и текстовите сигнали, после решава дали downstream pipeline-ът трябва да търси photo, diagram, icon или illustration.
+    # Входът идва през `slide` (Slide), `prompt` (str), `context_text` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_infer_research_image_type`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
     explicit = getattr(getattr(slide, "image_class", None), "value", getattr(slide, "image_class", None))
+    # `text` е нормализирано работно копие на текста; оригиналът остава непокътнат, а проверките стават върху предвидим формат.
     text = " ".join([prompt, context_text, str(getattr(slide, "image_prompt", "") or "")]).lower()
+    # Това условие е decision point: `any((term in text for term in ('dna', 'rna', 'base pairs', 'double helix', 'nucleotide',...`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`ImageClass.DIAGRAM.value`) и прескачаме ненужната останала работа.
     if any(
         term in text for term in ("dna", "rna", "base pairs", "double helix", "nucleotide", "molecule", "structure")
     ):
         return ImageClass.DIAGRAM.value
+    # Това условие е decision point: `explicit in {item.value for item in ImageClass}`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`explicit`) и прескачаме ненужната останала работа.
     if explicit in {item.value for item in ImageClass}:
         return explicit
+    # `inferred` пази резултата от `_infer_research_image_type`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     inferred = _infer_research_image_type(text)
+    # Това условие е decision point: `inferred in {ImageClass.DIAGRAM.value, ImageClass.ICON.value, ImageClass.ILLUSTRATION.value}`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`inferred`) и прескачаме ненужната останала работа.
     if inferred in {ImageClass.DIAGRAM.value, ImageClass.ICON.value, ImageClass.ILLUSTRATION.value}:
         return inferred
     return ImageClass.PHOTO.value
 
 
 def _extract_scene_from_image_prompt(prompt: str) -> str:
+    # Роля в pipeline-а: Отделя търсимата сцена от инструкциите за стил. Така stock search получава конкретни съществителни, а не Gemini-oriented думи като cinematic или clean.
+    # Входът идва през `prompt` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `re.search`, `re.sub`, `match.group`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
+    # `text` е нормализирано работно копие на текста; оригиналът остава непокътнат, а проверките стават върху предвидим формат.
     text = " ".join(prompt.split())
+    # `match` пази резултата от `re.search`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     match = re.search(r"Presentation visual for ['\"]([^'\"]+)['\"]:\s*(.+)", text, flags=re.I)
+    # Това условие е decision point: `match`.
+    # При вярно условие се активира `match.group`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if match:
+        # `text` е нормализирано работно копие на текста; оригиналът остава непокътнат, а проверките стават върху предвидим формат.
         text = match.group(2)
+    # `text` е нормализирано работно копие на текста; оригиналът остава непокътнат, а проверките стават върху предвидим формат.
     text = re.split(r"\bKeep it\b|\bMatch a\b|\bNo visible\b|\bNo text\b", text, maxsplit=1, flags=re.I)[0]
+    # Това условие е decision point: `re.search('\\b(illustration|diagram|icon|vector|drawing|cross[- ]section|anatomy)\\b', te...`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `''`, без да проверява по-слабите правила отдолу.
     if re.search(r"\b(illustration|diagram|icon|vector|drawing|cross[- ]section|anatomy)\b", text, flags=re.I):
         return ""
+    # `text` е нормализирано работно копие на текста; оригиналът остава непокътнат, а проверките стават върху предвидим формат.
     text = re.sub(
         r"\b(grounded|relevant|restrained|modern|clean|editorial|cinematic|professional)\b", " ", text, flags=re.I
     )
@@ -87,6 +143,12 @@ def _extract_scene_from_image_prompt(prompt: str) -> str:
 
 
 def _slide_concept_terms(title: str, bullets: list[str]) -> str:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `slide_concept_terms` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `title` (str), `bullets` (list[str]); имената показват каква част от контекста е собственост на тази стъпка.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
+    # `combined` пази резултата от `' '.join([title, *bullets]).lower`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     combined = " ".join([title, *bullets]).lower()
     concept_rules = [
         (("population", "growth", "demographic"), "population health"),
@@ -101,17 +163,32 @@ def _slide_concept_terms(title: str, bullets: list[str]) -> str:
         (("students", "classroom", "learning"), "classroom learning"),
     ]
     matched: list[str] = []
+    # Обхождаме `concept_rules` като `(terms, label)`, защото всеки елемент трябва да мине през една и съща pipeline стъпка.
+    # Цикълът държи обработката еднаква за всеки елемент.
     for terms, label in concept_rules:
+        # Това условие е decision point: `label == 'classroom learning' and 'machine learning' in combined`.
+        # При вярно условие се променя текущото състояние, което влияе на следващите стъпки.
         if label == "classroom learning" and "machine learning" in combined:
+            # Това условие е decision point: `not any((term in combined for term in ('students', 'classroom', 'teacher', 'school')))`.
+            # При вярно условие се променя текущото състояние, което влияе на следващите стъпки.
             if not any(term in combined for term in ("students", "classroom", "teacher", "school")):
                 continue
+        # Това условие е decision point: `any((term in combined for term in terms))`.
+        # При вярно условие се активира `matched.append`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if any(term in combined for term in terms):
             matched.append(label)
     return " ".join(matched[:2]).strip()
 
 
 def _domain_signal_counts(title: str, bullets: list[str], prompt: str) -> dict[str, int]:
+    # Роля в pipeline-а: Преброява тематичните сигнали по области; резултатът е евтина heuristic карта, използвана преди по-скъпо AI или provider търсене.
+    # Входът идва през `title` (str), `bullets` (list[str]), `prompt` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `english_visual_search_phrase`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `dict[str, int]`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
+    # `english_text` пази резултата от `english_visual_search_phrase`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     english_text = english_visual_search_phrase(title, *bullets, prompt, limit_words=18, max_length=180)
+    # `text` е нормализирано работно копие на текста; оригиналът остава непокътнат, а проверките стават върху предвидим формат.
     text = " ".join([title, *bullets, prompt, english_text]).lower()
     domain_rules = {
         "medical": (
@@ -157,40 +234,76 @@ def _domain_signal_counts(title: str, bullets: list[str], prompt: str) -> dict[s
 
 
 def _primary_scene_profile(title: str, bullets: list[str], prompt: str) -> tuple[str, tuple[str, ...]]:
+    # Роля в pipeline-а: Избира най-силната тематична област и я превежда към stock-photo сцена плюс релевантни ключови думи.
+    # Входът идва през `title` (str), `bullets` (list[str]), `prompt` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_domain_signal_counts`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `tuple[str, tuple[str, ...]]`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
+    # `scores` пази резултата от `_domain_signal_counts`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     scores = _domain_signal_counts(title, bullets, prompt)
+    # Това условие е decision point: `not any(scores.values())`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`('', ())`) и прескачаме ненужната останала работа.
     if not any(scores.values()):
         return "", ()
 
+    # `ordered` пази резултата от `sorted`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     ordered = sorted(scores.items(), key=lambda item: item[1], reverse=True)
     domain, score = ordered[0]
+    # Това условие е decision point: `score <= 0`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`('', ())`) и прескачаме ненужната останала работа.
     if score <= 0:
         return "", ()
 
+    # Това условие е decision point: `domain == 'medical'`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`('medical researcher in laboratory', ('medical', 'research', 'laboratory', 'public health...`) и прескачаме ненужната останала работа.
     if domain == "medical":
         return "medical researcher in laboratory", ("medical", "research", "laboratory", "public health", "drug")
+    # Това условие е decision point: `domain == 'engineering'`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`('engineer reviewing technical design', ('engineering', 'structural', 'design', 'mechanic...`) и прескачаме ненужната останала работа.
     if domain == "engineering":
         return "engineer reviewing technical design", ("engineering", "structural", "design", "mechanics", "industrial")
+    # Това условие е decision point: `domain == 'technology'`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`('data analyst at computer monitors', ('data', 'analytics', 'software', 'machine learning...`) и прескачаме ненужната останала работа.
     if domain == "technology":
         return "data analyst at computer monitors", ("data", "analytics", "software", "machine learning", "technology")
+    # Това условие е decision point: `domain == 'environment'`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`('environmental research team', ('climate', 'environment', 'energy', 'sustainability', 'r...`) и прескачаме ненужната останала работа.
     if domain == "environment":
         return "environmental research team", ("climate", "environment", "energy", "sustainability", "research")
+    # Това условие е decision point: `domain == 'education'`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`('students in classroom with laptop', ('education', 'students', 'classroom', 'learning',...`) и прескачаме ненужната останала работа.
     if domain == "education":
         return "students in classroom with laptop", ("education", "students", "classroom", "learning", "school")
     return "", ()
 
 
 def _photo_scene_hint(title: str, bullets: list[str], prompt: str) -> str:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `photo_scene_hint` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `title` (str), `bullets` (list[str]), `prompt` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_primary_scene_profile`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
     scene, _ = _primary_scene_profile(title, bullets, prompt)
     return scene
 
 
 def _domain_concept_terms(title: str, bullets: list[str], prompt: str) -> str:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `domain_concept_terms` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `title` (str), `bullets` (list[str]), `prompt` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_primary_scene_profile`, `_slide_concept_terms`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
     _, preferred_terms = _primary_scene_profile(title, bullets, prompt)
+    # Това условие е decision point: `not preferred_terms`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`_slide_concept_terms(title, bullets)`) и прескачаме ненужната останала работа.
     if not preferred_terms:
         return _slide_concept_terms(title, bullets)
 
+    # `text` е нормализирано работно копие на текста; оригиналът остава непокътнат, а проверките стават върху предвидим формат.
     text = " ".join([title, *bullets, prompt]).lower()
     matched = [term for term in preferred_terms if term in text]
+    # Това условие е decision point: `matched`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`' '.join(matched[:2]).strip()`) и прескачаме ненужната останала работа.
     if matched:
         return " ".join(matched[:2]).strip()
 
@@ -200,37 +313,78 @@ def _domain_concept_terms(title: str, bullets: list[str], prompt: str) -> str:
 def _english_keyword_phrase(
     *parts: str, limit_words: int = 5, max_length: int = 40, exclude: set[str] | None = None
 ) -> str:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `english_keyword_phrase` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `limit_words` (int), `max_length` (int), `exclude` (set[str] | None); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `english_visual_search_phrase`, `re.findall`, `seen.add`, `compact_search_query`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
+    # `phrase` пази резултата от `english_visual_search_phrase`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     phrase = english_visual_search_phrase(*parts, limit_words=limit_words + 3, max_length=max_length + 24)
+    # Това условие е decision point: `not phrase`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `''`, без да проверява по-слабите правила отдолу.
     if not phrase:
         return ""
+    # `exclude` пази резултата от `item.lower`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
+    # Comprehension синтаксисът комбинира обхождане и филтриране в една стойност; резултатът съдържа само елементите, минали условието.
     exclude = {item.lower() for item in (exclude or set())}
+    # `words` е думите от заглавието след Unicode нормализация; те са суровината за безопасния slug.
     words: list[str] = []
     seen: set[str] = set()
+    # Обхождаме `re.findall("[A-Za-z][A-Za-z0-9&'+-]*", phrase)` като `word`, защото всеки елемент трябва да мине през една и съща pipeline стъпка.
+    # Цикълът държи обработката еднаква за всеки елемент.
     for word in re.findall(r"[A-Za-z][A-Za-z0-9&'+-]*", phrase):
+        # `key` пази резултата от `word.lower`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         key = word.lower()
+        # Това условие е decision point: `key in exclude or key in seen`.
+        # При вярно условие се променя текущото състояние, което влияе на следващите стъпки.
         if key in exclude or key in seen:
             continue
         seen.add(key)
         words.append(word)
+        # Това условие е decision point: `len(words) >= limit_words`.
+        # При вярно условие се променя текущото състояние, което влияе на следващите стъпки.
         if len(words) >= limit_words:
             break
     return compact_search_query(" ".join(words), max_length=max_length) if words else ""
 
 
 def _presentation_entity(presentation_title: str) -> str:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `presentation_entity` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `presentation_title` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_named_entity_candidates`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
+    # `candidates` е работният списък с image резултати, който pipeline-ът филтрира и подрежда.
     candidates = _named_entity_candidates(presentation_title)
     return candidates[0] if candidates else ""
 
 
 def _english_entity_query(entity: str) -> str:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `english_entity_query` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `entity` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `english_visual_search_phrase`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
     return english_visual_search_phrase(entity, limit_words=4, max_length=42) or entity
 
 
 def _slide_mentions_entity(entity: str, title: str, bullets: list[str]) -> bool:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `slide_mentions_entity` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `entity` (str), `title` (str), `bullets` (list[str]); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `re.findall`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `bool`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
+    # Това условие е decision point: `not entity`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `False`, без да проверява по-слабите правила отдолу.
     if not entity:
         return False
+    # `text` е нормализирано работно копие на текста; оригиналът остава непокътнат, а проверките стават върху предвидим формат.
     text = " ".join([title, *bullets]).lower()
+    # `tokens` е theme настройките, които държат визуалното решение последователно между layouts и exporters.
+    # Comprehension синтаксисът комбинира обхождане и филтриране в една стойност; резултатът съдържа само елементите, минали условието.
     tokens = [token.lower() for token in re.findall(r"[^\W\d_]+", entity, flags=re.UNICODE)]
+    # Това условие е decision point: `not tokens`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `False`, без да проверява по-слабите правила отдолу.
     if not tokens:
         return False
     surname = tokens[-1]
@@ -238,16 +392,34 @@ def _slide_mentions_entity(entity: str, title: str, bullets: list[str]) -> bool:
 
 
 def _dna_research_prompt(lower_subject: str) -> str | None:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `dna_research_prompt` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `lower_subject` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str | None`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
+    # Това условие е decision point: `'dna' not in lower_subject`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `None`, без да проверява по-слабите правила отдолу.
     if "dna" not in lower_subject:
         return None
+    # Това условие е decision point: `any((term in lower_subject for term in ('adenine', 'thymine', 'guanine', 'cytosine', 'hyd...`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `'DNA base pairs'`, без да проверява по-слабите правила отдолу.
     if any(term in lower_subject for term in ("adenine", "thymine", "guanine", "cytosine", "hydrogen")):
         return "DNA base pairs"
+    # Това условие е decision point: `'structure' in lower_subject or 'double helix' in lower_subject`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `'DNA double helix'`, без да проверява по-слабите правила отдолу.
     if "structure" in lower_subject or "double helix" in lower_subject:
         return "DNA double helix"
     return "DNA"
 
 
 def _rna_research_prompt(lower_subject: str, lower_slide: str) -> str | None:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: обработва стъпката `rna_research_prompt` като отделна отговорност, така че caller-ът да използва резултата без да познава вътрешните проверки и междинни стойности.
+    # Входът идва през `lower_subject` (str), `lower_slide` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Функцията работи основно с локални стойности и не делегира към други services.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str | None`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
+    # Това условие е decision point: `'rna' not in lower_subject`.
+    # Това е приоритетно правило: първото съвпадение печели и класифицира входа като `None`, без да проверява по-слабите правила отдолу.
     if "rna" not in lower_subject:
         return None
     query_rules = (
@@ -258,33 +430,57 @@ def _rna_research_prompt(lower_subject: str, lower_slide: str) -> str | None:
         (("transcription", "rna polymerase"), "RNA transcription"),
         (("mirna", "sirna", "microrna", "gene regulation", "regulatory"), "microRNA gene regulation"),
     )
+    # Обхождаме `query_rules` като `(terms, query)`, защото всеки елемент трябва да мине през една и съща pipeline стъпка.
+    # Цикълът държи обработката еднаква за всеки елемент.
     for terms, query in query_rules:
+        # Това условие е decision point: `any((term in lower_slide for term in terms))`.
+        # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`query`) и прескачаме ненужната останала работа.
         if any(term in lower_slide for term in terms):
             return query
     return "RNA molecule"
 
 
 def _research_prompt(slide: Slide, presentation_title: str) -> str:
+    # Роля в pipeline-а: Сглобява кратка search заявка от слайда и заглавието на презентацията, така че provider-ите да търсят смисъла, а не декоративните инструкции.
+    # Входът идва през `slide` (Slide), `presentation_title` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `english_visual_search_phrase`, `_presentation_entity`, `_named_entity_candidates`, `_domain_concept_terms`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
+    # `title` пази резултата от `(getattr(slide, 'title', None) or '').strip`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     title = (getattr(slide, "title", None) or "").strip()
+    # `prompt` е инструкцията, която носи визуалния или съдържателния смисъл към следващия AI/search етап.
     prompt = (getattr(slide, "image_prompt", None) or "").strip()
+    # `bullets` пази резултата от `str(item).strip`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
+    # Comprehension синтаксисът комбинира обхождане и филтриране в една стойност; резултатът съдържа само елементите, минали условието.
     bullets = [str(item).strip() for item in (getattr(slide, "bullets", None) or []) if str(item).strip()]
+    # `english_subject` пази резултата от `english_visual_search_phrase`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     english_subject = english_visual_search_phrase(
         prompt, title, presentation_title, *bullets[:2], limit_words=8, max_length=72
     )
+    # `lower_subject` пази резултата от `english_subject.lower`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     lower_subject = english_subject.lower()
+    # `lower_slide` пази резултата от `' '.join([title, prompt, presentation_title, *bullets[:4]]).lower`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     lower_slide = " ".join([title, prompt, presentation_title, *bullets[:4]]).lower()
+    # `scientific_query` пази резултата от `_dna_research_prompt`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     scientific_query = _dna_research_prompt(lower_subject) or _rna_research_prompt(lower_subject, lower_slide)
+    # Това условие е decision point: `scientific_query`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`scientific_query`) и прескачаме ненужната останала работа.
     if scientific_query:
         return scientific_query
 
+    # `deck_entity` пази резултата от `_presentation_entity`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     deck_entity = _presentation_entity(presentation_title)
+    # `local_entity_candidates` пази резултата от `_named_entity_candidates`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     local_entity_candidates = _named_entity_candidates(" | ".join([title, *bullets[:2]]))
+    # `entity` пази резултата от `_slide_mentions_entity`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     entity = (
         local_entity_candidates[0]
         if local_entity_candidates
         else (deck_entity if _slide_mentions_entity(deck_entity, title, bullets) else "")
     )
 
+    # Това условие е decision point: `entity`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`compact_search_query(query, max_length=30)`) и прескачаме ненужната останала работа.
     if entity:
         entity_tokens = {token.lower() for token in re.findall(r"[^\W\d_]+", entity, flags=re.UNICODE)}
         english_entity = _english_entity_query(entity)
@@ -306,7 +502,11 @@ def _research_prompt(slide: Slide, presentation_title: str) -> str:
         prompt_scene if prompt_scene and prompt_scene.lower() not in {"classroom", "learning", "students"} else ""
     )
 
+    # Обхождаме `(keyword_subject, prompt_scene, concept_terms, scene_hint)` като `candidate`, защото всеки елемент трябва да мине през една и съща pipeline стъпка.
+    # Цикълът държи обработката еднаква за всеки елемент.
     for candidate in (keyword_subject, prompt_scene, concept_terms, scene_hint):
+        # Това условие е decision point: `candidate`.
+        # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`compact_search_query(english_candidate, max_length=32)`) и прескачаме ненужната останала работа.
         if candidate:
             english_candidate = _english_keyword_phrase(candidate, limit_words=5, max_length=32) or candidate
             return compact_search_query(english_candidate, max_length=32)
@@ -314,11 +514,23 @@ def _research_prompt(slide: Slide, presentation_title: str) -> str:
 
 
 def _research_context(slide: Slide, presentation_title: str) -> str:
+    # Роля в pipeline-а: Събира по-широк контекст за scoring и disambiguation, без да претоварва самата search заявка.
+    # Входът идва през `slide` (Slide), `presentation_title` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_presentation_entity`, `_slide_mentions_entity`, `english_visual_search_phrase`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `str`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
+    # `title` пази резултата от `(getattr(slide, 'title', None) or '').strip`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     title = (getattr(slide, "title", None) or "").strip()
+    # `subtitle` пази резултата от `(getattr(slide, 'subtitle', None) or '').strip`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     subtitle = (getattr(slide, "subtitle", None) or "").strip()
+    # `bullets` пази резултата от `str(item).strip`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
+    # Comprehension синтаксисът комбинира обхождане и филтриране в една стойност; резултатът съдържа само елементите, минали условието.
     bullets = [str(item).strip() for item in (getattr(slide, "bullets", None) or []) if str(item).strip()]
     parts = [title, subtitle, *bullets[:3]]
+    # `deck_entity` пази резултата от `_presentation_entity`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     deck_entity = _presentation_entity(presentation_title)
+    # Това условие е decision point: `_slide_mentions_entity(deck_entity, title, bullets)`.
+    # При вярно условие се активира `parts.append`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if _slide_mentions_entity(deck_entity, title, bullets):
         parts.append(deck_entity)
     return english_visual_search_phrase(*parts, presentation_title, limit_words=16, max_length=140)
@@ -330,6 +542,11 @@ def _resolved_from_research_image(
     width: int | None,
     height: int | None,
 ) -> ResolvedImageAsset:
+    # Роля в pipeline-а: Това е вътрешна помощна стъпка: взима решение между няколко възможни източника или стратегии и връща готов резултат.
+    # Входът идва през `selected` (SelectedImage), `optimized_path` (Path), `width` (int | None), `height` (int | None); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `ResolvedImageAsset`, `optimized_path.resolve`; така се вижда кои отговорности функцията делегира.
+    # Типовете в сигнатурата документират договора за caller-а и позволяват грешки да се хващат преди runtime.
+    # Изходен договор: `ResolvedImageAsset`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
     return ResolvedImageAsset(
         local_path=str(optimized_path.resolve()),
         public_url=f"/generated/optimized_images/{optimized_path.name}",
@@ -346,16 +563,30 @@ def _resolved_from_research_image(
 
 
 async def _resolve_one_slide_image(slide: Slide, style: str) -> None:
+    # Роля в pipeline-а: Изпълнява Gemini image generation пътя за един слайд и записва оптимизирания локален asset обратно върху него.
+    # Входът идва през `slide` (Slide), `style` (str); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `build_image_cache_key`, `optimize_image_bytes`, `ResolvedImageAsset`, `generate_slide_image`; така се вижда кои отговорности функцията делегира.
+    # `async def` позволява функцията да използва `await`: при мрежово чакане event loop-ът може да обслужва други заявки вместо thread-ът да стои блокиран.
+    # Изходен договор: функцията не връща нов обект; ефектът ѝ е промяна на подадено състояние, файл или външна услуга.
     image_prompt = getattr(slide, "image_prompt", None)
+    # Това условие е decision point: `not image_prompt`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`None`) и прескачаме ненужната останала работа.
     if not image_prompt:
         return
 
+    # `cache_key` пази резултата от `build_image_cache_key`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     cache_key = build_image_cache_key(slide, style)
     public_key = f"gemini-{cache_key}"
 
+    # Тук започва контролирана рискова зона: външна услуга, parsing, filesystem или rendering може да се провали.
+    # `try/except` превръща техническите грешки ((GeminiImageGenerationError, ImageOptimizationError)) в предвидимо поведение за горния слой.
     try:
+        # `image_bytes` е суровото binary съдържание на изображението преди оптимизация и запис.
+        # `await` спира само тази coroutine до готов резултат; останалите FastAPI задачи могат да продължат.
         image_bytes = await generate_slide_image(image_prompt)
+        # `optimized` пази резултата от `optimize_image_bytes`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         optimized = optimize_image_bytes(image_bytes, cache_key=public_key)
+        # `slide.resolved_image` пази резултата от `ResolvedImageAsset`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         slide.resolved_image = ResolvedImageAsset(
             local_path=str(optimized.path.resolve()),
             public_url=f"/generated/optimized_images/{optimized.path.name}",
@@ -380,10 +611,20 @@ async def _resolve_one_research_image(
     used_source_urls: set[str],
     used_hashes: set[str],
 ) -> None:
+    # Роля в pipeline-а: Изпълнява research пътя за един слайд: source selection, provider search, ranking, download и превръщане към ResolvedImageAsset.
+    # Входът идва през `slide` (Slide), `presentation_title` (str), `style` (str), `used_source_urls` (set[str]), `used_hashes` (set[str]); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_research_prompt`, `_research_context`, `_research_image_class`, `prompt.isascii`; така се вижда кои отговорности функцията делегира.
+    # `async def` позволява функцията да използва `await`: при мрежово чакане event loop-ът може да обслужва други заявки вместо thread-ът да стои блокиран.
+    # Изходен договор: функцията не връща нов обект; ефектът ѝ е промяна на подадено състояние, файл или външна услуга.
+    # `prompt` е инструкцията, която носи визуалния или съдържателния смисъл към следващия AI/search етап.
     prompt = _research_prompt(slide, presentation_title)
+    # `context_text` е допълнителният смислов контекст, който намалява риска търсенето да избере тематично грешна снимка.
     context_text = _research_context(slide, presentation_title)
+    # Това условие е decision point: `not prompt`.
+    # Това е guard clause: при вярно условие вече имаме достатъчно надежден резултат (`None`) и прескачаме ненужната останала работа.
     if not prompt:
         return
+    # `image_class` пази резултата от `_research_image_class`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     image_class = _research_image_class(slide, prompt, context_text)
     logger.info(
         "Prepared research prompt. slide_title=%r context=%r prompt=%r image_class=%s image_prompt=%r context_ascii=%s prompt_ascii=%s",
@@ -396,7 +637,11 @@ async def _resolve_one_research_image(
         prompt.isascii(),
     )
 
+    # Тук започва контролирана рискова зона: външна услуга, parsing, filesystem или rendering може да се провали.
+    # `try/except` превръща техническите грешки ((ImageResearchResolutionError, ImageOptimizationError)) в предвидимо поведение за горния слой.
     try:
+        # `response` е суровият отговор от външна услуга, който още трябва да бъде валидиран и нормализиран.
+        # `await` спира само тази coroutine до готов резултат; останалите FastAPI задачи могат да продължат.
         response = await _get_image_researcher().research(
             ImageResearchRequest(
                 prompt=prompt,
@@ -410,12 +655,18 @@ async def _resolve_one_research_image(
                 exclude_hashes=sorted(used_hashes),
             )
         )
+        # `selected` е резултатите, преминали филтрите и избрани за връщане към горния слой.
         selected = response.selected_image
+        # Това условие е decision point: `not selected`.
+        # При вярно условие се активира `ImageResearchResolutionError`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if not selected:
             raise ImageResearchResolutionError("; ".join(response.warnings[:3]) or "No matching image found.")
 
+        # `cache_key` пази резултата от `build_image_cache_key`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         cache_key = f"research-{build_image_cache_key(slide, style)}"
+        # `optimized` пази резултата от `optimize_image_file`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         optimized = optimize_image_file(Path(selected.local_path), cache_key=cache_key)
+        # `slide.resolved_image` пази резултата от `_resolved_from_research_image`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         slide.resolved_image = _resolved_from_research_image(
             selected,
             optimized.path,
@@ -423,6 +674,8 @@ async def _resolve_one_research_image(
             optimized.height,
         )
         used_source_urls.add(selected.source_url)
+        # Това условие е decision point: `selected.content_hash`.
+        # При вярно условие се активира `used_hashes.add`; така този branch избира конкретна стратегия, а не просто проверява стойност.
         if selected.content_hash:
             used_hashes.add(selected.content_hash)
         logger.info(
@@ -440,6 +693,12 @@ async def enrich_presentation_images(
     presentation: Presentation,
     image_source: ImageSource = ImageSource.GEMINI,
 ) -> Presentation:
+    # Роля в pipeline-а: Оркестрира image обработката за всички подходящи слайдове, ограничава concurrency и пази реда на fallback стратегиите.
+    # Входът идва през `presentation` (Presentation), `image_source` (ImageSource); имената показват каква част от контекста е собственост на тази стъпка.
+    # Основните преходи навън са към `_image_slides`, `get_image_model_name`, `asyncio.Semaphore`, `asyncio.gather`; така се вижда кои отговорности функцията делегира.
+    # `async def` позволява функцията да използва `await`: при мрежово чакане event loop-ът може да обслужва други заявки вместо thread-ът да стои блокиран.
+    # Изходен договор: `Presentation`. Резултатът се записва върху Slide/Presentation и след това се консумира от layout и exporters.
+    # `image_slides` пази резултата от `_image_slides`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
     image_slides = _image_slides(presentation)
     logger.info(
         "Image enrichment starting. image_slide_count=%s source=%s model=%s",
@@ -453,7 +712,16 @@ async def enrich_presentation_images(
     used_hashes: set[str] = set()
 
     async def resolve(slide: Slide) -> None:
+        # Тук започва контролирана рискова зона: външна услуга, parsing, filesystem или rendering може да се провали.
+        # `try/except` превръща техническите грешки ((GeminiImageGenerationError, ImageResearchResolutionError)) в предвидимо поведение за горния слой.
+        # Роля в pipeline-а: взима решение между няколко възможни източника или стратегии и връща готов резултат.
+        # Входът идва през `slide` (Slide); имената показват каква част от контекста е собственост на тази стъпка.
+        # Основните преходи навън са към `_resolve_one_research_image`, `_resolve_one_slide_image`; така се вижда кои отговорности функцията делегира.
+        # `async def` позволява функцията да използва `await`: при мрежово чакане event loop-ът може да обслужва други заявки вместо thread-ът да стои блокиран.
+        # Изходен договор: функцията не връща нов обект; ефектът ѝ е промяна на подадено състояние, файл или външна услуга.
         try:
+            # Това условие е decision point: `image_source == ImageSource.UNSPLASH`.
+            # При вярно условие се активира `_resolve_one_research_image`; така този branch избира конкретна стратегия, а не просто проверява стойност.
             if image_source == ImageSource.UNSPLASH:
                 await _resolve_one_research_image(
                     slide, presentation.title, presentation.theme, used_source_urls, used_hashes
@@ -463,19 +731,32 @@ async def enrich_presentation_images(
         except (GeminiImageGenerationError, ImageResearchResolutionError) as exc:
             failures.append(str(exc))
 
+    # Това условие е decision point: `image_source == ImageSource.GEMINI`.
+    # При вярно условие се активира `max`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if image_source == ImageSource.GEMINI:
+        # `concurrency` пази резултата от `os.getenv`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         concurrency = max(1, int(os.getenv("GEMINI_IMAGE_CONCURRENCY", "3")))
+        # `semaphore` пази резултата от `asyncio.Semaphore`, за да бъде проверен или използван в следващите стъпки вместо операцията да се повтори.
         semaphore = asyncio.Semaphore(concurrency)
 
         async def resolve_gemini(slide: Slide) -> None:
+            # Роля в pipeline-а: взима решение между няколко възможни източника или стратегии и връща готов резултат.
+            # Входът идва през `slide` (Slide); имената показват каква част от контекста е собственост на тази стъпка.
+            # Основните преходи навън са към `resolve`; така се вижда кои отговорности функцията делегира.
+            # `async def` позволява функцията да използва `await`: при мрежово чакане event loop-ът може да обслужва други заявки вместо thread-ът да стои блокиран.
+            # Изходен договор: функцията не връща нов обект; ефектът ѝ е промяна на подадено състояние, файл или външна услуга.
             async with semaphore:
                 await resolve(slide)
 
         await asyncio.gather(*(resolve_gemini(slide) for slide in image_slides))
     else:
+        # Обхождаме `image_slides` като `slide`, защото всеки елемент трябва да мине през една и съща pipeline стъпка.
+        # Цикълът държи обработката еднаква за всеки елемент.
         for slide in image_slides:
             await resolve(slide)
 
+    # Това условие е decision point: `failures`.
+    # При вярно условие се активира `' | '.join`; така този branch избира конкретна стратегия, а не просто проверява стойност.
     if failures:
         logger.warning(
             "Image enrichment completed with unresolved slides. source=%s unresolved=%s errors=%s",
